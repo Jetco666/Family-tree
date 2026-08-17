@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Family Tree interaktif">
+<title>Family Tree — Keluarga Besar</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <div class="eyebrow">FAMILY TREE</div>
+    <h1>Keluarga Besar</h1>
+  </div>
+  <div class="top-actions">
+    <button id="searchBtn" class="icon-btn" title="Cari">⌕</button>
+    <button id="themeBtn" class="icon-btn" title="Mode gelap/terang">◐</button>
+    <button id="resetBtn" class="ghost-btn">Reset Tampilan</button>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div>
+      <span class="pill">🌳 Silsilah Keluarga</span>
+      <h2>Jelajahi hubungan keluarga secara interaktif.</h2>
+      <p>Klik kartu anggota keluarga untuk melihat profil, pasangan, orang tua, dan anak. Gunakan zoom atau geser area pohon.</p>
+    </div>
+    <div class="stats">
+      <div><strong id="memberCount">0</strong><span>Anggota</span></div>
+      <div><strong id="generationCount">0</strong><span>Generasi</span></div>
+    </div>
+  </section>
+
+  <section class="toolbar">
+    <div class="search-wrap">
+      <input id="searchInput" type="search" placeholder="Cari nama anggota keluarga..." autocomplete="off">
+      <div id="searchResults" class="search-results"></div>
+    </div>
+    <div class="controls">
+      <button id="zoomOut">−</button>
+      <button id="zoomIn">+</button>
+      <button id="fitBtn">Fit</button>
+      <button id="fullscreenBtn">⛶</button>
+    </div>
+  </section>
+
+  <section id="treeViewport" class="tree-viewport" aria-label="Pohon keluarga">
+    <div id="treeCanvas" class="tree-canvas"></div>
+    <div class="hint">Geser untuk menjelajah • Scroll/pinch untuk zoom • Klik anggota untuk detail</div>
+  </section>
+</main>
+
+<aside id="drawer" class="drawer" aria-hidden="true">
+  <button id="closeDrawer" class="close">×</button>
+  <div id="profile"></div>
+</aside>
+<div id="overlay" class="overlay"></div>
+
+<script src="family-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
