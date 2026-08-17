@@ -1,1 +1,109 @@
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:#f5f7fa;color:#182230}.topbar{height:92px;background:#fff;border-bottom:1px solid #e2e7ed;display:flex;align-items:center;justify-content:space-between;padding:0 32px;position:sticky;top:0;z-index:20}.eyebrow{font-size:13px;letter-spacing:2px;font-weight:800;color:#718096}.topbar h1{margin:2px 0;font-size:27px}.top-actions,.controls{display:flex;gap:10px;align-items:center}.btn,.icon-btn,.control{background:#fff;border:1px solid #d8e0e8;border-radius:13px;padding:10px 16px;font-size:15px;color:inherit;cursor:pointer}.icon-btn{width:52px;height:52px;font-size:25px;padding:0}.control{min-width:54px;height:52px;font-size:22px}.wide{font-size:15px}.btn:hover,.icon-btn:hover,.control:hover{border-color:#9aabb8}main{padding:40px 54px}.hero{min-height:230px;border:1px solid #dce9df;border-radius:30px;padding:40px;background:linear-gradient(120deg,#f7fff9,#eef8f1);display:flex;justify-content:space-between;align-items:center;gap:40px}.hero h2{font-size:38px;line-height:1.15;margin:24px 0 12px;max-width:900px}.hero p{font-size:19px;line-height:1.65;color:#60748a;max-width:900px;margin:0}.badge{display:inline-block;background:#d9f4e2;color:#166534;border-radius:999px;padding:9px 17px;font-weight:800}.stats{display:flex;gap:45px;min-width:230px}.stats div{display:flex;flex-direction:column}.stats strong{font-size:38px}.stats span{color:#718096}.toolbar{display:flex;justify-content:space-between;align-items:center;margin:24px 0 14px;gap:20px}.search-wrap{position:relative;max-width:720px;flex:1}.search-wrap input{width:100%;height:58px;border:1px solid #d8e0e8;border-radius:16px;padding:0 20px;font-size:16px;background:#fff;color:inherit;outline:none}.search-results{position:absolute;left:0;right:0;top:64px;background:#fff;border:1px solid #d8e0e8;border-radius:14px;box-shadow:0 18px 45px #0002;overflow:hidden;z-index:30}.search-results button{display:block;width:100%;padding:13px 16px;border:0;background:#fff;text-align:left;cursor:pointer}.search-results button:hover{background:#f1f6f3}.hidden{display:none}.tree-viewport{height:650px;border:1px solid #dce2e8;border-radius:24px;background:#fff;position:relative;overflow:hidden;cursor:grab;box-shadow:0 10px 35px #19304a0d}.tree-viewport.dragging{cursor:grabbing}.tree-canvas{position:absolute;left:0;top:0;transform-origin:0 0;min-width:1800px;min-height:600px}.hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:#14202acc;color:#fff;padding:7px 13px;border-radius:999px;font-size:12px;pointer-events:none}.generation{position:absolute}.person-card{width:190px;min-height:126px;border:1px solid #d9e1e7;border-radius:18px;background:#fff;padding:14px;display:flex;gap:12px;align-items:center;box-shadow:0 7px 22px #14283c17;cursor:pointer;transition:.15s}.person-card:hover{transform:translateY(-3px);box-shadow:0 14px 28px #14283c24;border-color:#7aa889}.person-card .avatar{width:56px;height:56px;border-radius:50%;object-fit:cover;flex:none;background:#dcefe2;display:grid;place-items:center;color:#24703b;font-weight:900;font-size:17px}.person-name{font-weight:800;font-size:15px;line-height:1.2}.person-years{font-size:12px;color:#7a8794;margin-top:5px}.person-role{font-size:11px;color:#4d7b59;margin-top:6px}.panel{position:fixed;right:0;top:0;width:min(420px,92vw);height:100vh;background:#fff;z-index:50;transform:translateX(105%);transition:.25s;box-shadow:-20px 0 50px #0003;padding:34px;overflow:auto}.panel.open{transform:translateX(0)}.close{position:absolute;right:20px;top:18px;border:0;background:transparent;font-size:30px;cursor:pointer}.profile-head{display:flex;gap:18px;align-items:center;margin:35px 0 25px}.profile-photo{width:92px;height:92px;border-radius:50%;object-fit:cover;background:#dcefe2}.profile-title{font-size:25px;font-weight:850}.profile-years{color:#718096;margin-top:5px}.rel-section{margin-top:24px}.rel-section h3{font-size:14px;text-transform:uppercase;letter-spacing:1px;color:#718096}.rel-list{display:flex;flex-wrap:wrap;gap:8px}.rel-chip{border:1px solid #d8e0e8;background:#f7fafb;border-radius:999px;padding:8px 11px;cursor:pointer;color:inherit}.overlay{position:fixed;inset:0;background:#0004;z-index:40}@media(max-width:800px){.topbar{padding:0 16px;height:78px}.topbar h1{font-size:21px}.top-actions .btn{display:none}main{padding:20px 14px}.hero{padding:26px;display:block}.hero h2{font-size:28px}.hero p{font-size:16px}.stats{margin-top:25px}.toolbar{align-items:stretch;flex-direction:column}.controls{justify-content:flex-end}.tree-viewport{height:560px}.person-card{width:175px}.panel{padding:25px}.hint{font-size:10px;white-space:nowrap}}body.dark{background:#0d141c;color:#edf3f8}body.dark .topbar,body.dark .tree-viewport,body.dark .person-card,body.dark .search-results,body.dark .search-results button,body.dark .panel,body.dark .btn,body.dark .icon-btn,body.dark .control,body.dark .search-wrap input{background:#111c26;color:#edf3f8;border-color:#344451}body.dark .hero{background:linear-gradient(120deg,#13231a,#13231e);border-color:#294735}
+/* ============================================
+   LOGIN OVERLAY — V3
+   ============================================ */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.login-overlay.hidden {
+  display: none;
+}
+
+.login-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 40px 32px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.login-logo {
+  font-size: 56px;
+  margin-bottom: 8px;
+}
+
+.login-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 4px;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0 0 28px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.login-form label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-top: 8px;
+}
+
+.login-form input {
+  padding: 12px 14px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.login-form input:focus {
+  border-color: #10b981;
+}
+
+.login-btn {
+  margin-top: 16px;
+  padding: 12px;
+  background: #10b981;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.login-btn:hover {
+  background: #059669;
+}
+
+.login-btn:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.login-error {
+  color: #dc2626;
+  font-size: 13px;
+  min-height: 18px;
+  margin: 8px 0 0;
+  text-align: center;
+}
+
+.login-footer {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 24px 0 0;
+}
