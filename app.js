@@ -1,29 +1,122 @@
-const cfg=FAMILY_CONFIG,people=cfg.people,byId=Object.fromEntries(people.map(p=>[p.id,p]));const $=x=>document.getElementById(x);let scale=1,panX=20,panY=20,drag=false,sx,sy,ox,oy;const generation={};function gen(id,seen=new Set()){if(generation[id])return generation[id];if(seen.has(id))return 1;seen.add(id);let p=byId[id];generation[id]=p.parentIds?.length?Math.max(...p.parentIds.map(x=>gen(x,new Set(seen))))+1:1;return generation[id]}people.forEach(p=>gen(p.id));$("familyTitle").textContent=cfg.title;$("memberCount").textContent=people.length;$("generationCount").textContent=Math.max(...Object.values(generation));
-function initials(n){return n.split(/\s+/).slice(0,2).map(x=>x[0]).join("").toUpperCase()}function card(p){return `<div class="person-card" data-id="${p.id}">${p.photo?`<img class="avatar" src="${p.photo}" alt="">`:`<div class="avatar">${initials(p.name)}</div>`}<div><div class="person-name">${p.name}</div><div class="person-years">${p.birth||""}${p.death?" — "+p.death:""}</div><div class="person-role">${p.role||""}</div></div></div>`}
-function render(){const c=$("treeCanvas");c.innerHTML="";const gs={};people.forEach(p=>(gs[generation[p.id]]??=[]).push(p));const max=Math.max(...Object.keys(gs).map(Number)),W=1800,row=190,pos={};const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("width",W);svg.setAttribute("height",max*row+250);Object.assign(svg.style,{position:"absolute",inset:"0",pointerEvents:"none"});c.append(svg);
-for(let g=1;g<=max;g++){let arr=gs[g]||[],gap=Math.max(35,(W-arr.length*190)/(arr.length+1)),x=gap,y=(g-1)*row+60;arr.forEach(p=>{pos[p.id]={x,y};let e=document.createElement("div");e.style.cssText=`position:absolute;left:${x}px;top:${y}px`;e.innerHTML=card(p);c.append(e);x+=190+gap})}
-function line(x1,y1,x2,y2){let l=document.createElementNS("http://www.w3.org/2000/svg","line");for(const [k,v] of Object.entries({x1,y1,x2,y2,stroke:"#9aabb7","stroke-width":2}))l.setAttribute(k,v);svg.append(l)}
-people.forEach(p=>{let a=pos[p.id];(p.spouseIds||[]).filter(s=>p.id<s).forEach(id=>{let b=pos[id];if(a&&b)line(a.x+190,a.y+63,b.x,b.y+63)});(p.parentIds||[]).forEach(id=>{let b=pos[id];if(a&&b)line(b.x+95,b.y+126,a.x+95,a.y)})});c.style.width=W+"px";c.style.height=max*row+250+"px";c.querySelectorAll(".person-card").forEach(e=>e.onclick=e=>profile(e.currentTarget.dataset.id));fit()}
-function apply(){ $("treeCanvas").style.transform=`translate(${panX}px,${panY}px) scale(${scale})`}function fit(){let r=$("treeViewport").getBoundingClientRect(),h=Math.max(...Object.values(generation))*190+250;scale=Math.max(.42,Math.min(.95,r.width/1800,r.height/h));panX=Math.max(10,(r.width-1800*scale)/2);panY=12;apply()}function zoom(f,cx=$("treeViewport").clientWidth/2,cy=$("treeViewport").clientHeight/2){let o=scale;scale=Math.max(.35,Math.min(1.6,scale*f));panX=cx-(cx-panX)*scale/o;panY=cy-(cy-panY)*scale/o;apply()}
-$("zoomIn").onclick=()=>zoom(1.15);$("zoomOut").onclick=()=>zoom(.87);$("fitBtn").onclick=fit;$("resetBtn").onclick=fit;window.onresize=fit;$("treeViewport").onwheel=e=>{e.preventDefault();let r=$("treeViewport").getBoundingClientRect();zoom(e.deltaY<0?1.08:.93,e.clientX-r.left,e.clientY-r.top)};$("treeViewport").onpointerdown=e=>{
-  drag=true;
-  sx=e.clientX; sy=e.clientY; ox=panX; oy=panY;
-  $("treeViewport").classList.add("dragging");
-};
-$("treeViewport").onpointermove=e=>{
-  if(drag){
-    panX=ox+e.clientX-sx;
-    panY=oy+e.clientY-sy;
-    apply();
+// ============================================
+// FAMILY TREE V3 — app.js
+// Tahap 4: Login + koneksi Supabase
+// ============================================
+
+// Inisialisasi Supabase client
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+// Elemen DOM
+const loginOverlay = document.getElementById('login-overlay');
+const loginForm    = document.getElementById('login-form');
+const loginBtn     = document.getElementById('login-btn');
+const loginError   = document.getElementById('login-error');
+const emailInput   = document.getElementById('login-email');
+const passInput    = document.getElementById('login-password');
+
+// State global
+let currentUser = null;
+let currentRole = 'member';
+
+// ---------- LOGIN ----------
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  loginError.textContent = '';
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Memproses...';
+
+  const email = emailInput.value.trim();
+  const password = passInput.value;
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    loginError.textContent = translateAuthError(error.message);
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Masuk';
+    return;
   }
+
+  // Ambil role dari profiles
+  const { data: profile, error: profileErr } = await supabase
+    .from('profiles')
+    .select('role, full_name')
+    .eq('id', data.user.id)
+    .single();
+
+  if (profileErr || !profile) {
+    loginError.textContent = 'Profil tidak ditemukan. Hubungi admin.';
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Masuk';
+    await supabase.auth.signOut();
+    return;
+  }
+
+  currentUser = data.user;
+  currentRole = profile.role;
+
+  console.log('✅ Login sukses:', {
+    email: currentUser.email,
+    role: currentRole,
+    fullName: profile.full_name
+  });
+
+  // Sembunyikan overlay login
+  loginOverlay.classList.add('hidden');
+
+  // Placeholder: tampilkan info sementara di body
+  showWelcomeBanner(profile.full_name, currentRole);
+
+  // TODO Tahap 5: render family tree dari Supabase
+});
+
+// ---------- AUTO-LOGIN (session masih aktif) ----------
+(async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('id', session.user.id)
+      .single();
+
+    if (profile) {
+      currentUser = session.user;
+      currentRole = profile.role;
+      loginOverlay.classList.add('hidden');
+      showWelcomeBanner(profile.full_name, currentRole);
+    }
+  }
+})();
+
+// ---------- HELPERS ----------
+function translateAuthError(msg) {
+  const map = {
+    'Invalid login credentials': 'Email atau password salah.',
+    'Email not confirmed': 'Email belum dikonfirmasi.',
+    'User already registered': 'Email sudah terdaftar.',
+    'Signup disabled': 'Pendaftaran dinonaktifkan.',
+    'Rate limit exceeded': 'Terlalu banyak percobaan. Coba lagi sebentar.'
+  };
+  return map[msg] || msg;
+}
+
+function showWelcomeBanner(name, role) {
+  // Banner sementara — akan diganti UI family tree di Tahap 5
+  const banner = document.createElement('div');
+  banner.style.cssText = `
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    background: #10b981; color: white; padding: 12px 20px; border-radius: 8px;
+    font-family: sans-serif; font-size: 14px; z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  `;
+  const roleLabel = role === 'admin' ? '👑 Admin' : '👁 Viewer';
+  banner.innerHTML = `Halo, <b>${name || 'Anggota Keluarga'}</b> — Login sebagai ${roleLabel}`;
+  document.body.appendChild(banner);
+}
+
+// Expose logout untuk dipakai nanti
+window.familyTreeLogout = async () => {
+  await supabase.auth.signOut();
+  location.reload();
 };
-$("treeViewport").onpointerup=()=>{
-  drag=false;
-  $("treeViewport").classList.remove("dragging");
-};
-$("treeViewport").onpointercancel=()=>{
-  drag=false;
-  $("treeViewport").classList.remove("dragging");
-};$("fullBtn").onclick=()=>document.fullscreenElement?document.exitFullscreen():$("treeViewport").requestFullscreen?.();
-function section(t,a){return a.length?`<div class="rel-section"><h3>${t}</h3><div class="rel-list">${a.map(x=>`<button class="rel-chip" data-rel="${x.id}">${x.name}</button>`).join("")}</div></div>`:""}function profile(id){let p=byId[id],sp=(p.spouseIds||[]).map(x=>byId[x]).filter(Boolean),pa=(p.parentIds||[]).map(x=>byId[x]).filter(Boolean),ch=people.filter(x=>(x.parentIds||[]).includes(id)),si=people.filter(x=>x.id!==id&&p.parentIds?.length&&p.parentIds.every(q=>(x.parentIds||[]).includes(q)));$("profileContent").innerHTML=`<div class="profile-head">${p.photo?`<img class="profile-photo" src="${p.photo}">`:`<div class="profile-photo" style="display:grid;place-items:center;font-size:28px;font-weight:900;color:#24703b">${initials(p.name)}</div>`}<div><div class="profile-title">${p.name}</div><div class="profile-years">${p.birth||""}${p.death?" — "+p.death:""}</div></div></div><div class="rel-section"><h3>Informasi</h3><p>${p.role||"Anggota keluarga"}</p></div>${section("Pasangan",sp)}${section("Orang tua",pa)}${section("Saudara",si)}${section("Anak",ch)}`;$("profilePanel").classList.add("open");$("overlay").classList.remove("hidden")}
-$("closePanel").onclick=()=>{ $("profilePanel").classList.remove("open");$("overlay").classList.add("hidden")};$("overlay").onclick=$("closePanel").onclick;$("profileContent").onclick=e=>{let b=e.target.closest("[data-rel]");if(b)profile(b.dataset.rel)};$("themeBtn").onclick=()=>document.body.classList.toggle("dark");$("searchBtn").onclick=()=>$("searchInput").focus();$("searchInput").oninput=e=>{let q=e.target.value.toLowerCase().trim(),box=$("searchResults");if(!q){box.classList.add("hidden");return}let a=people.filter(p=>p.name.toLowerCase().includes(q)).slice(0,8);box.innerHTML=a.map(p=>`<button data-search="${p.id}">${p.name} <small>${p.birth||""}</small></button>`).join("")||"<button>Tidak ditemukan</button>";box.classList.remove("hidden")};$("searchResults").onclick=e=>{let b=e.target.closest("[data-search]");if(b){profile(b.dataset.search);$("searchResults").classList.add("hidden")}};render();
