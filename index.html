@@ -1,4 +1,34 @@
-<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Family Tree — Keluarga Besar</title><link rel="stylesheet" href="style.css"></head><body>
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Family Tree — Keluarga Besar</title><link rel="stylesheet" href="style.css"><!-- Supabase JS client -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Config kita -->
+<script src="supabase-config.js"></script></head><body>
+  <!-- ========== LOGIN OVERLAY (V3) ========== -->
+<div id="login-overlay" class="login-overlay">
+  <div class="login-card">
+    <div class="login-logo">🌳</div>
+    <h1 class="login-title">Silsilah Keluarga</h1>
+    <p class="login-subtitle">Masuk untuk melihat pohon keluarga</p>
+
+    <form id="login-form" class="login-form">
+      <label for="login-email">Email</label>
+      <input type="email" id="login-email" required autocomplete="email"
+             placeholder="nama@keluarga.com" />
+
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" required autocomplete="current-password"
+             placeholder="••••••••••••" minlength="6" />
+
+      <button type="submit" id="login-btn" class="login-btn">Masuk</button>
+
+      <p id="login-error" class="login-error"></p>
+    </form>
+
+    <p class="login-footer">
+      Hanya anggota keluarga yang terdaftar yang dapat masuk.
+    </p>
+  </div>
+</div>
+<!-- ========== END LOGIN OVERLAY ========== -->
 <header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar</h1></div><div class="top-actions"><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
 <main><section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Klik anggota untuk melihat pasangan, orang tua, saudara, dan anak. Gunakan zoom atau geser area pohon.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
 <section class="toolbar"><div class="search-wrap"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="search-results hidden"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button></div></section>
