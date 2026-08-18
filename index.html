@@ -133,13 +133,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     return client;
   }
 
-  function banner(name, role) {
-    var b = document.createElement('div');
-    b.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:12px 20px;border-radius:8px;font-family:sans-serif;font-size:14px;z-index:6000;box-shadow:0 4px 12px rgba(0,0,0,.15);';
-    b.innerHTML = 'Halo, <b>' + (name || 'Anggota Keluarga') + '</b> — Login sebagai ' + (role === 'admin' ? '👑 Admin' : '👁 Viewer');
-    document.body.appendChild(b);
-  }
-
   function showCardMessage(msg) {
     loginForm.style.display = 'none'; reqForm.style.display = 'none';
     document.getElementById('toggle-line').style.display = 'none';
@@ -162,7 +155,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     if (role === 'admin' || role === 'member') {
       isAdmin = role === 'admin';
       loginOverlay.classList.add('hidden');
-      banner(name, role);
       enterApp(sb);
     } else if (role === 'rejected') {
       showCardMessage('❌ Maaf, permintaan akses Anda ditolak oleh admin.');
