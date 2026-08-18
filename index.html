@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Family Tree — Keluarga Besar ZAKARIA</title>
+<title>Family Tree — Keluarga Besar</title>
 <link rel="stylesheet" href="style.css">
 <script src="supabase-config.js?v=3"></script>
 <style>
@@ -84,4 +84,614 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
 <main>
 <section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Klik anggota untuk melihat pasangan, orang tua, saudara, dan anak. Gunakan zoom atau geser area pohon.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
 <section class="toolbar"><div class="search-wrap" style="position:relative;"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="ft-searchres"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button><button id="addBtn" class="btn" style="display:none;">+ Tambah Anggota</button></div></section>
-<section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;
+<section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;transform-origin:0 0;"></div><div class="hint">Geser untuk melihat cabang lain • Scroll untuk zoom</div></section>
+</main>
+
+<script>
+(function () {
+  var loginOverlay = document.getElementById('login-overlay');
+  var loginCard = document.querySelector('.login-card');
+  var loginForm = document.getElementById('login-form');
+  var reqForm = document.getElementById('req-form');
+  var loginBtn = document.getElementById('login-btn');
+  var loginError = document.getElementById('login-error');
+  var reqError = document.getElementById('req-error');
+  var emailInput = document.getElementById('login-email');
+  var passInput = document.getElementById('login-password');
+  var client = null, SB = null, isAdmin = false;
+  var presenceChannel = null;
+
+  var STATUS = {
+    single:   { label: 'Lajang',     emoji: '' },
+    married:  { label: 'Menikah',    emoji: '💍' },
+    divorced: { label: 'Cerai',      emoji: '💔' },
+    widowed:  { label: 'Janda/Duda', emoji: '🕊' }
+  };
+
+  var BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso).slice(0, 10);
+    return d.getDate() + ' ' + BULAN[d.getMonth()] + ' ' + d.getFullYear();
+  }
+
+  document.getElementById('show-req').onclick = function () {
+    loginForm.style.display = 'none'; reqForm.style.display = 'flex';
+    document.getElementById('show-req').style.display = 'none';
+    document.getElementById('show-login').style.display = 'inline';
+  };
+  document.getElementById('show-login').onclick = function () {
+    reqForm.style.display = 'none'; loginForm.style.display = 'flex';
+    document.getElementById('show-login').style.display = 'none';
+    document.getElementById('show-req').style.display = 'inline';
+  };
+
+  async function getClient() {
+    if (client) return client;
+    var lib = null;
+    if (window.supabase && window.supabase.createClient) { lib = window.supabase; }
+    else {
+      var src = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm','https://esm.sh/@supabase/supabase-js@2'];
+      for (var i = 0; i < src.length; i++) {
+        try { var mod = await import(src[i]); if (mod && mod.createClient) { lib = mod; break; } } catch (e) {}
+      }
+    }
+    if (!lib) throw new Error('Library Supabase gagal dimuat.');
+    client = lib.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+    return client;
+  }
+
+  function showCardMessage(msg) {
+    loginForm.style.display = 'none'; reqForm.style.display = 'none';
+    document.getElementById('toggle-line').style.display = 'none';
+    var box = document.getElementById('card-msg');
+    if (!box) {
+      box = document.createElement('div'); box.id = 'card-msg';
+      box.style.cssText = 'margin-top:12px;font-size:14px;color:#334155;';
+      loginCard.appendChild(box);
+    }
+    box.innerHTML = msg + '<br><button class="login-btn" style="margin-top:14px;" id="msg-logout">Keluar</button>';
+    document.getElementById('msg-logout').onclick = async function () {
+      var sb = await getClient(); await sb.auth.signOut(); location.reload();
+    };
+  }
+
+  async function handleSession(sb, user) {
+    var prof = await sb.from('profiles').select('role, full_name').eq('id', user.id).single();
+    var role = prof.data ? prof.data.role : 'pending';
+    var name = prof.data ? prof.data.full_name : '';
+    if (role === 'admin' || role === 'member') {
+      isAdmin = role === 'admin';
+      loginOverlay.classList.add('hidden');
+      setupPresence(sb, user, name, role);
+      enterApp(sb);
+    } else if (role === 'rejected') {
+      showCardMessage('❌ Maaf, permintaan akses Anda ditolak oleh admin.');
+    } else {
+      showCardMessage('⏳ Halo, <b>' + (name || 'anggota') + '</b>. Permintaan akses sudah diterima.<br>Silakan tunggu persetujuan admin. Setelah disetujui, masuk kembali untuk melihat silsilah.');
+    }
+  }
+
+  loginForm.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    loginError.textContent = '';
+    loginBtn.disabled = true; loginBtn.textContent = 'Memproses...';
+    try {
+      var sb = await getClient();
+      var res = await sb.auth.signInWithPassword({ email: emailInput.value.trim(), password: passInput.value });
+      if (res.error) { loginError.textContent = res.error.message; loginBtn.disabled = false; loginBtn.textContent = 'Masuk'; return; }
+      await handleSession(sb, res.data.user);
+    } catch (err) {
+      loginError.textContent = 'Error: ' + (err && err.message ? err.message : err);
+      loginBtn.disabled = false; loginBtn.textContent = 'Masuk';
+    }
+  });
+
+  reqForm.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    reqError.textContent = '';
+    var btn = document.getElementById('req-btn');
+    btn.disabled = true; btn.textContent = 'Mengirim...';
+    try {
+      var sb = await getClient();
+      var res = await sb.auth.signUp({
+        email: document.getElementById('req-email').value.trim(),
+        password: document.getElementById('req-password').value,
+        options: { data: { full_name: document.getElementById('req-name').value.trim() } }
+      });
+      if (res.error) { reqError.textContent = res.error.message; btn.disabled = false; btn.textContent = '📨 Kirim Permintaan Akses'; return; }
+      if (res.data && res.data.session) {
+        await handleSession(sb, res.data.user);
+      } else {
+        showCardMessage('📬 Permintaan terkirim. Cek email Anda untuk konfirmasi, lalu masuk di halaman ini.');
+      }
+    } catch (err) {
+      reqError.textContent = 'Error: ' + (err && err.message ? err.message : err);
+      btn.disabled = false; btn.textContent = '📨 Kirim Permintaan Akses';
+    }
+  });
+
+  (async function () {
+    try {
+      var sb = await getClient();
+      var s = await sb.auth.getSession();
+      if (s.data && s.data.session) await handleSession(sb, s.data.session.user);
+    } catch (e) {}
+  })();
+
+  // ================= PRESENCE =================
+  function setupPresence(sb, user, name, role) {
+    try {
+      presenceChannel = sb.channel('family-presence', { config: { presence: { key: user.id } } });
+      presenceChannel.on('presence', { event: 'sync' }, function () {
+        updateOnlineUI();
+        var panel = document.getElementById('ftPanel');
+        if (panel && panel.dataset.mode === 'online') renderOnlineList(panel);
+      }).on('presence', { event: 'join' }, function () {
+        updateOnlineUI();
+        var panel = document.getElementById('ftPanel');
+        if (panel && panel.dataset.mode === 'online') renderOnlineList(panel);
+      }).on('presence', { event: 'leave' }, function () {
+        updateOnlineUI();
+        var panel = document.getElementById('ftPanel');
+        if (panel && panel.dataset.mode === 'online') renderOnlineList(panel);
+      }).subscribe(async function (status) {
+        if (status === 'SUBSCRIBED') {
+          try {
+            await presenceChannel.track({ name: name || '(tanpa nama)', role: role, at: new Date().toISOString() });
+          } catch (e) {}
+        }
+      });
+    } catch (e) { console.warn('Presence tidak aktif:', e); }
+  }
+
+  function presenceEntries() {
+    var out = [];
+    if (!presenceChannel) return out;
+    var st = presenceChannel.presenceState();
+    for (var k in st) {
+      if (Object.prototype.hasOwnProperty.call(st, k)) {
+        var arr = st[k];
+        for (var i = 0; i < arr.length; i++) out.push(arr[i]);
+      }
+    }
+    return out;
+  }
+
+  function updateOnlineUI() {
+    var btn = document.getElementById('onlineBtn');
+    if (!btn || !isAdmin) return;
+    btn.style.display = 'inline-block';
+    btn.textContent = '👥 Online (' + presenceEntries().length + ')';
+  }
+
+  function openOnlinePanel() {
+    var old = document.getElementById('ftPanel'); if (old) old.remove();
+    var panel = document.createElement('div'); panel.id = 'ftPanel'; panel.className = 'ft-panel';
+    panel.dataset.mode = 'online';
+    panel.innerHTML = '<button class="ft-close" onclick="this.parentNode.remove()">×</button><h2>👥 Sedang Online</h2><p class="muted">Terbarui otomatis secara live.</p><div id="onlineList" class="muted">Memuat...</div>';
+    document.body.appendChild(panel);
+    renderOnlineList(panel);
+  }
+
+  function renderOnlineList(panel) {
+    var box = panel.querySelector('#onlineList');
+    if (!box) return;
+    var list = presenceEntries();
+    if (!list.length) { box.textContent = 'Tidak ada user online terdeteksi.'; return; }
+    box.innerHTML = '';
+    list.forEach(function (u) {
+      var d = document.createElement('div'); d.className = 'ft-link';
+      d.innerHTML = (u.role === 'admin' ? '👑 ' : '👁 ') + '<b>' + esc(u.name || '(tanpa nama)') + '</b> <span class="muted">' + (u.role === 'admin' ? 'Admin' : 'Viewer') + '</span>';
+      box.appendChild(d);
+    });
+  }
+
+  var members = [], rels = [], byId = {};
+  var scale = 1, panX = 20, panY = 20;
+  var CARD_W = 175, CARD_H = 140, GAP_X = 55, ROW_H = 225;
+  var uiWired = false;
+
+  function spousesOf(id) { return rels.filter(function (r) { return r.rel_type === 'spouse' && (r.person_a === id || r.person_b === id); }); }
+  function parentsOf(id) { return rels.filter(function (r) { return r.rel_type === 'parent_child' && r.person_b === id; }).map(function (r) { return r.person_a; }); }
+  function childrenOf(id) { return rels.filter(function (r) { return r.rel_type === 'parent_child' && r.person_a === id; }).map(function (r) { return r.person_b; }); }
+
+  function ageOf(p) {
+    if (!p.birth_date) return null;
+    var b = new Date(p.birth_date);
+    var end = p.death_date ? new Date(p.death_date) : new Date();
+    var a = end.getFullYear() - b.getFullYear();
+    var m = end.getMonth() - b.getMonth();
+    if (m < 0 || (m === 0 && end.getDate() < b.getDate())) a--;
+    return a;
+  }
+
+  async function enterApp(sb) {
+    SB = sb;
+    try {
+      await refresh(); wireUI();
+      if (isAdmin) { updateReqCount(); updateOnlineUI(); }
+    } catch (e) {
+      document.getElementById('treeCanvas').innerHTML = '<div style="padding:30px;color:#b91c1c;font-family:sans-serif;">Gagal memuat data: ' + (e.message || e) + '</div>';
+    }
+  }
+
+  async function refresh() {
+    var m = await SB.from('family_members').select('*');
+    if (m.error) throw m.error;
+    var r = await SB.from('family_relationships').select('*');
+    if (r.error) throw r.error;
+    members = m.data || []; rels = r.data || [];
+    byId = {}; members.forEach(function (p) { byId[p.id] = p; });
+    render();
+  }
+
+  function render() {
+    var canvas = document.getElementById('treeCanvas');
+    canvas.innerHTML = '';
+    if (!members.length) { canvas.innerHTML = '<div style="padding:30px;font-family:sans-serif;">Belum ada data anggota.</div>'; return; }
+
+    var memo = {};
+    function genOf(id, seen) {
+      if (memo[id] !== undefined) return memo[id];
+      seen = seen || {}; if (seen[id]) return 1; seen[id] = true;
+      var g = 1, ps = parentsOf(id);
+      for (var i = 0; i < ps.length; i++) g = Math.max(g, genOf(ps[i], seen) + 1);
+      memo[id] = g; return g;
+    }
+    var dgen = {};
+    members.forEach(function (p) { dgen[p.id] = genOf(p.id); });
+    rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) { var g = Math.max(dgen[r.person_a], dgen[r.person_b]); dgen[r.person_a] = g; dgen[r.person_b] = g; });
+    for (var k = 0; k < 2; k++) rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) { dgen[r.person_b] = Math.max(dgen[r.person_b], dgen[r.person_a] + 1); });
+    rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) { var g = Math.max(dgen[r.person_a], dgen[r.person_b]); dgen[r.person_a] = g; dgen[r.person_b] = g; });
+
+    var placed = {}, pos = {}, slotByGen = {};
+    function nextSlot(g) { slotByGen[g] = (slotByGen[g] || 0) + 1; return slotByGen[g] - 1; }
+    var queue = members.filter(function (p) { return parentsOf(p.id).length === 0; }).map(function (p) { return p.id; });
+    function place(id) {
+      if (placed[id]) return;
+      placed[id] = true;
+      var g = dgen[id];
+      pos[id] = { g: g, s: nextSlot(g) };
+      spousesOf(id).forEach(function (r) {
+        var sp = r.person_a === id ? r.person_b : r.person_a;
+        if (!placed[sp]) { placed[sp] = true; dgen[sp] = g; pos[sp] = { g: g, s: nextSlot(g) }; }
+      });
+      childrenOf(id).forEach(function (ch) { queue.push(ch); });
+    }
+    while (queue.length) place(queue.shift());
+    members.forEach(function (p) { if (!placed[p.id]) place(p.id); });
+
+    function X(id) { return pos[id].s * (CARD_W + GAP_X) + 20; }
+    function Y(id) { return (pos[id].g - 1) * ROW_H + 20; }
+
+    var maxW = 0, maxG = 0;
+    members.forEach(function (p) { maxW = Math.max(maxW, X(p.id) + CARD_W); maxG = Math.max(maxG, pos[p.id].g); });
+    var W = maxW + 40, H = maxG * ROW_H + 60;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', W); svg.setAttribute('height', H);
+    svg.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;';
+    function line(x1, y1, x2, y2, color, dash) {
+      var l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+      l.setAttribute('stroke', color); l.setAttribute('stroke-width', 2);
+      if (dash) l.setAttribute('stroke-dasharray', '6 4');
+      svg.appendChild(l);
+    }
+    function label(x, y, txt, color) {
+      var t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', x); t.setAttribute('y', y);
+      t.setAttribute('fill', color); t.setAttribute('font-size', '14');
+      t.setAttribute('text-anchor', 'middle'); t.setAttribute('font-weight', 'bold');
+      t.textContent = txt; svg.appendChild(t);
+    }
+
+    rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) {
+      if (!pos[r.person_a] || !pos[r.person_b]) return;
+      var a = r.person_a, b = r.person_b;
+      if (X(a) > X(b)) { var t = a; a = b; b = t; }
+      var y = Y(a) + CARD_H / 2;
+      var st = r.marriage_status;
+      var color = st === 'divorced' ? '#ef4444' : (st === 'widowed' ? '#94a3b8' : '#10b981');
+      line(X(a) + CARD_W, y, X(b), y, color, st === 'divorced');
+      var mx = (X(a) + CARD_W + X(b)) / 2;
+      label(mx, y - 6, st === 'divorced' ? '//' : (st === 'widowed' ? '🕊' : '♥'), color);
+    });
+
+    members.forEach(function (ch) {
+      var ps = parentsOf(ch.id).filter(function (p) { return pos[p]; });
+      if (!ps.length || !pos[ch.id]) return;
+      var ax = 0; ps.forEach(function (p) { ax += X(p) + CARD_W / 2; }); ax = ax / ps.length;
+      var py = Math.max.apply(null, ps.map(function (p) { return Y(p); })) + CARD_H;
+      var cx = X(ch.id) + CARD_W / 2, cy = Y(ch.id);
+      var my = (py + cy) / 2;
+      line(ax, py, ax, my, '#94a3b8');
+      line(ax, my, cx, my, '#94a3b8');
+      line(cx, my, cx, cy, '#94a3b8');
+    });
+    canvas.appendChild(svg);
+
+    members.forEach(function (p) {
+      var d = document.createElement('div');
+      d.className = 'ft-card';
+      d.style.left = X(p.id) + 'px'; d.style.top = Y(p.id) + 'px'; d.style.height = CARD_H + 'px';
+      var st = STATUS[p.marital_status];
+      var age = ageOf(p);
+      var yrs = (p.birth_date ? fmtDate(p.birth_date) : '') + (p.death_date ? ' — ' + fmtDate(p.death_date) : (p.birth_date ? ' —' : ''));
+      var ageHtml = '';
+      if (age !== null) ageHtml = p.death_date ? '<div class="ft-age dead">Wafat usia ' + age + ' th</div>' : '<div class="ft-age">Usia ' + age + ' th</div>';
+      var av = p.photo_url ? '<img src="' + escAttr(p.photo_url) + '" alt="">' : initials(p.name);
+      d.innerHTML = '<div class="ft-avatar">' + av + '</div>' +
+        '<div class="ft-name">' + esc(p.name) + '</div>' +
+        '<div class="ft-years">' + yrs + '</div>' + ageHtml +
+        (st ? '<div class="ft-status">' + st.emoji + ' ' + st.label + '</div>' : '');
+      d.onclick = function () { openPanel(p.id); };
+      canvas.appendChild(d);
+    });
+
+    document.getElementById('memberCount').textContent = members.length;
+    document.getElementById('generationCount').textContent = maxG;
+    scale = 1; panX = 20; panY = 20; applyTransform();
+  }
+
+  function initials(n) { return (n || '?').split(/\s+/).slice(0, 2).map(function (x) { return x[0]; }).join('').toUpperCase(); }
+  function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+  function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
+
+  function applyTransform() { document.getElementById('treeCanvas').style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + scale + ')'; }
+  function zoom(f) { scale = Math.max(0.3, Math.min(2, scale * f)); applyTransform(); }
+  function fit() {
+    var vp = document.getElementById('treeViewport');
+    var c = document.getElementById('treeCanvas');
+    var r = vp.getBoundingClientRect();
+    var w = parseFloat(c.style.width) || 1, h = parseFloat(c.style.height) || 1;
+    scale = Math.max(0.3, Math.min(1, r.width / (w + 40), r.height / (h + 40)));
+    panX = Math.max(10, (r.width - w * scale) / 2); panY = 12;
+    applyTransform();
+  }
+
+  async function updateReqCount() {
+    if (!isAdmin || !SB) return;
+    var c = await SB.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'pending');
+    var btn = document.getElementById('reqBtn');
+    btn.style.display = 'inline-block';
+    btn.textContent = '🔔 Akses' + (c.count ? ' (' + c.count + ')' : '');
+  }
+
+  function wireUI() {
+    if (uiWired) return; uiWired = true;
+    document.getElementById('zoomIn').onclick = function () { zoom(1.15); };
+    document.getElementById('zoomOut').onclick = function () { zoom(0.87); };
+    document.getElementById('fitBtn').onclick = fit;
+    document.getElementById('resetBtn').onclick = fit;
+    document.getElementById('fullBtn').onclick = function () {
+      var vp = document.getElementById('treeViewport');
+      if (document.fullscreenElement) document.exitFullscreen(); else vp.requestFullscreen();
+    };
+    document.getElementById('themeBtn').onclick = function () { document.body.classList.toggle('dark'); };
+    if (isAdmin) {
+      var addBtn = document.getElementById('addBtn');
+      addBtn.style.display = 'inline-block'; addBtn.onclick = function () { openForm(null); };
+      document.getElementById('reqBtn').onclick = function () { openRequests(); };
+      document.getElementById('onlineBtn').onclick = function () { openOnlinePanel(); };
+    }
+    var vp = document.getElementById('treeViewport');
+    vp.onwheel = function (e) { e.preventDefault(); zoom(e.deltaY < 0 ? 1.08 : 0.93); };
+    var drag = false, sx, sy, ox, oy;
+    vp.onpointerdown = function (e) { drag = true; sx = e.clientX; sy = e.clientY; ox = panX; oy = panY; };
+    window.onpointermove = function (e) { if (!drag) return; panX = ox + (e.clientX - sx); panY = oy + (e.clientY - sy); applyTransform(); };
+    window.onpointerup = function () { drag = false; };
+
+    var si = document.getElementById('searchInput'), sr = document.getElementById('searchResults');
+    si.oninput = function () {
+      var q = si.value.toLowerCase();
+      if (!q) { sr.style.display = 'none'; return; }
+      var hit = members.filter(function (p) { return p.name.toLowerCase().indexOf(q) >= 0; }).slice(0, 8);
+      sr.innerHTML = '';
+      hit.forEach(function (p) {
+        var d = document.createElement('div');
+        d.textContent = p.name;
+        d.onclick = function () { sr.style.display = 'none'; si.value = ''; openPanel(p.id); };
+        sr.appendChild(d);
+      });
+      sr.style.display = hit.length ? 'block' : 'none';
+    };
+    fit();
+  }
+
+  function openRequests() {
+    var old = document.getElementById('ftPanel'); if (old) old.remove();
+    var panel = document.createElement('div'); panel.id = 'ftPanel'; panel.className = 'ft-panel';
+    panel.innerHTML = '<button class="ft-close" onclick="this.parentNode.remove()">×</button><h2>🔔 Permintaan Akses</h2><div id="reqList" class="muted">Memuat...</div>';
+    document.body.appendChild(panel);
+    loadReqList(panel);
+  }
+
+  async function loadReqList(panel) {
+    var r = await SB.from('profiles').select('id, full_name, created_at').eq('role', 'pending').order('created_at');
+    var box = panel.querySelector('#reqList');
+    if (r.error) { box.textContent = 'Error: ' + r.error.message; return; }
+    if (!r.data.length) { box.textContent = 'Tidak ada permintaan menunggu.'; return; }
+    box.innerHTML = '';
+    r.data.forEach(function (u) {
+      var d = document.createElement('div'); d.className = 'ft-link';
+      d.innerHTML = '<b>' + esc(u.full_name || '(tanpa nama)') + '</b><div class="muted">Mendaftar ' + (u.created_at ? u.created_at.slice(0, 10) : '') + '</div>';
+      var b1 = document.createElement('button'); b1.className = 'ft-btn'; b1.textContent = '✅ Setujui'; b1.style.marginRight = '6px';
+      b1.onclick = async function () {
+        var x = await SB.from('profiles').update({ role: 'member' }).eq('id', u.id);
+        if (x.error) alert('Gagal: ' + x.error.message);
+        loadReqList(panel); updateReqCount();
+      };
+      var b2 = document.createElement('button'); b2.className = 'ft-btn danger'; b2.textContent = '❌ Tolak';
+      b2.onclick = async function () {
+        var x = await SB.from('profiles').update({ role: 'rejected' }).eq('id', u.id);
+        if (x.error) alert('Gagal: ' + x.error.message);
+        loadReqList(panel); updateReqCount();
+      };
+      d.appendChild(b1); d.appendChild(b2);
+      box.appendChild(d);
+    });
+  }
+
+  function memberSelect(sid, exclude) {
+    var opts = '<option value="">— pilih anggota —</option>';
+    members.forEach(function (m2) { if (m2.id !== exclude) opts += '<option value="' + m2.id + '">' + esc(m2.name) + '</option>'; });
+    return '<select id="' + sid + '">' + opts + '</select>';
+  }
+
+  function openPanel(id) {
+    var p = byId[id]; if (!p) return;
+    var old = document.getElementById('ftPanel'); if (old) old.remove();
+    var st = STATUS[p.marital_status];
+    var age = ageOf(p);
+    var html = '<button class="ft-close" onclick="this.parentNode.remove()">×</button>';
+    if (p.photo_url) html += '<img class="ft-photo-big" src="' + escAttr(p.photo_url) + '" alt="">';
+    html += '<h2>' + esc(p.name) + '</h2>';
+    html += '<div class="muted">' + (p.gender === 'male' ? 'Laki-laki' : p.gender === 'female' ? 'Perempuan' : '') + '</div>';
+    if (p.birth_date) html += '<div class="muted">🎂 Lahir: ' + fmtDate(p.birth_date) + '</div>';
+    if (p.death_date) html += '<div class="muted">🕊 Wafat: ' + fmtDate(p.death_date) + (age !== null ? ' (usia ' + age + ' tahun)' : '') + '</div>';
+    else if (age !== null) html += '<div class="muted">Usia ' + age + ' tahun</div>';
+    if (st) html += '<div class="ft-status" style="margin-top:8px;font-size:13px;">' + st.emoji + ' ' + st.label + '</div>';
+    if (p.bio) html += '<p style="font-size:13px;">' + esc(p.bio) + '</p>';
+
+    var sp = spousesOf(id);
+    if (sp.length) {
+      html += '<h4>Pasangan</h4>';
+      sp.forEach(function (r) {
+        var o = byId[r.person_a === id ? r.person_b : r.person_a]; if (!o) return;
+        var info = r.marriage_status === 'divorced' ? '💔 Cerai' + (r.divorce_date ? ' ' + fmtDate(r.divorce_date) : '') : (r.marriage_status === 'widowed' ? '🕊' : '♥' + (r.marriage_date ? ' ' + fmtDate(r.marriage_date) : ''));
+        html += '<div class="ft-link" data-goto="' + o.id + '">' + esc(o.name) + ' <span class="muted">' + info + '</span>' + (isAdmin ? '<span class="ft-x" data-unlink="' + r.id + '" title="Putuskan hubungan">×</span>' : '') + '</div>';
+      });
+    }
+    var ps = parentsOf(id);
+    if (ps.length) {
+      html += '<h4>Orang Tua</h4>';
+      ps.forEach(function (pid) {
+        var rel = rels.filter(function (r) { return r.rel_type === 'parent_child' && r.person_a === pid && r.person_b === id; })[0];
+        if (byId[pid]) html += '<div class="ft-link" data-goto="' + pid + '">' + esc(byId[pid].name) + (isAdmin && rel ? '<span class="ft-x" data-unlink="' + rel.id + '" title="Hapus hubungan">×</span>' : '') + '</div>';
+      });
+    }
+    var ch = childrenOf(id);
+    if (ch.length) {
+      html += '<h4>Anak</h4>';
+      ch.forEach(function (cid) {
+        var rel = rels.filter(function (r) { return r.rel_type === 'parent_child' && r.person_a === id && r.person_b === cid; })[0];
+        if (byId[cid]) html += '<div class="ft-link" data-goto="' + cid + '">' + esc(byId[cid].name) + (isAdmin && rel ? '<span class="ft-x" data-unlink="' + rel.id + '" title="Hapus hubungan">×</span>' : '') + '</div>';
+      });
+    }
+
+    if (isAdmin) {
+      html += '<div style="margin-top:14px;display:flex;gap:8px;"><button class="ft-btn" id="pEdit">✏️ Edit</button><button class="ft-btn danger" id="pDel">🗑 Hapus</button></div>';
+      html += '<h4>Admin: Hubungan</h4>';
+      html += '<div class="ft-relbox">' + memberSelect('selSpouse', id) +
+        '<select id="selSpouseSt"><option value="married">Menikah</option><option value="divorced">Cerai</option><option value="widowed">Janda/Duda</option></select>' +
+        '<input type="date" id="spouseDate" title="Tanggal nikah"><input type="date" id="spouseDiv" title="Tanggal cerai (opsional)">' +
+        '<button class="ft-btn" id="pLinkSpouse">💑 Hubungkan Pasangan</button></div>';
+      html += '<div class="ft-relbox">' + memberSelect('selChild', id) + '<button class="ft-btn" id="pLinkChild">👶 Jadikan Anak</button></div>';
+      html += '<div class="ft-relbox">' + memberSelect('selParent', id) + '<button class="ft-btn" id="pLinkParent">🧓 Jadikan Orang Tua</button></div>';
+    }
+
+    var panel = document.createElement('div');
+    panel.id = 'ftPanel'; panel.className = 'ft-panel';
+    panel.innerHTML = html;
+    panel.onclick = function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('[data-goto]') : null;
+      if (t) openPanel(t.getAttribute('data-goto'));
+      var u = e.target && e.target.getAttribute ? e.target.getAttribute('data-unlink') : null;
+      if (u) unlinkRel(u);
+    };
+    if (isAdmin) {
+      panel.querySelector('#pEdit').onclick = function () { openForm(p); };
+      panel.querySelector('#pDel').onclick = async function () {
+        if (!confirm('Hapus ' + p.name + '? Semua hubungannya ikut terhapus.')) return;
+        try { var d = await SB.from('family_members').delete().eq('id', p.id); if (d.error) throw d.error; panel.remove(); await refresh(); } catch (e2) { alert('Gagal hapus: ' + (e2.message || e2)); }
+      };
+      panel.querySelector('#pLinkSpouse').onclick = async function () {
+        var o = panel.querySelector('#selSpouse').value;
+        if (!o) { alert('Pilih anggota dulu.'); return; }
+        try {
+          var i = await SB.from('family_relationships').insert({ rel_type: 'spouse', person_a: id, person_b: o, marriage_status: panel.querySelector('#selSpouseSt').value || null, marriage_date: panel.querySelector('#spouseDate').value || null, divorce_date: panel.querySelector('#spouseDiv').value || null });
+          if (i.error) throw i.error;
+          await refresh(); openPanel(id);
+        } catch (e2) { alert('Gagal: ' + (e2.message || e2)); }
+      };
+      panel.querySelector('#pLinkChild').onclick = async function () {
+        var o = panel.querySelector('#selChild').value;
+        if (!o) { alert('Pilih anggota dulu.'); return; }
+        try { var i = await SB.from('family_relationships').insert({ rel_type: 'parent_child', person_a: id, person_b: o }); if (i.error) throw i.error; await refresh(); openPanel(id); } catch (e2) { alert('Gagal: ' + (e2.message || e2)); }
+      };
+      panel.querySelector('#pLinkParent').onclick = async function () {
+        var o = panel.querySelector('#selParent').value;
+        if (!o) { alert('Pilih anggota dulu.'); return; }
+        try { var i = await SB.from('family_relationships').insert({ rel_type: 'parent_child', person_a: o, person_b: id }); if (i.error) throw i.error; await refresh(); openPanel(id); } catch (e2) { alert('Gagal: ' + (e2.message || e2)); }
+      };
+    }
+    document.body.appendChild(panel);
+  }
+
+  async function unlinkRel(rid) {
+    if (!confirm('Putuskan hubungan ini?')) return;
+    try { var d = await SB.from('family_relationships').delete().eq('id', rid); if (d.error) throw d.error; await refresh(); } catch (e) { alert('Gagal: ' + (e.message || e)); }
+  }
+
+  function openForm(p) {
+    var old = document.getElementById('ftModal'); if (old) old.remove();
+    var m = document.createElement('div'); m.id = 'ftModal'; m.className = 'ft-modal';
+    var stOpts = '<option value="">—</option><option value="single">Lajang</option><option value="married">Menikah</option><option value="divorced">Cerai</option><option value="widowed">Janda/Duda</option>';
+    m.innerHTML = '<div class="ft-modal-card"><h3>' + (p ? '✏️ Edit' : '➕ Tambah') + ' Anggota</h3>' +
+      '<label>Foto Profil</label>' +
+      (p && p.photo_url ? '<img id="fPhotoPrev" class="ft-photo-preview" src="' + escAttr(p.photo_url) + '">' : '<img id="fPhotoPrev" class="ft-photo-preview" style="display:none;">') +
+      '<input type="file" id="fPhoto" accept="image/*">' +
+      '<label>Nama *</label><input id="fName" value="' + (p ? escAttr(p.name) : '') + '">' +
+      '<label>Jenis Kelamin</label><select id="fGender"><option value="">—</option><option value="male"' + (p && p.gender === 'male' ? ' selected' : '') + '>Laki-laki</option><option value="female"' + (p && p.gender === 'female' ? ' selected' : '') + '>Perempuan</option></select>' +
+      '<label>Tanggal Lahir</label><input type="date" id="fBirth" value="' + (p && p.birth_date ? p.birth_date.slice(0, 10) : '') + '">' +
+      '<label>Tanggal Wafat (opsional)</label><input type="date" id="fDeath" value="' + (p && p.death_date ? p.death_date.slice(0, 10) : '') + '">' +
+      '<label>Status Pernikahan</label><select id="fStatus">' + stOpts.replace('value="' + (p ? p.marital_status : '') + '"', 'value="' + (p ? p.marital_status : '') + '" selected') + '</select>' +
+      '<label>Catatan</label><textarea id="fBio" rows="2">' + (p ? esc(p.bio || '') : '') + '</textarea>' +
+      '<div style="display:flex;gap:8px;margin-top:14px;"><button class="ft-btn" id="fSave">💾 Simpan</button><button class="ft-btn" id="fCancel" style="background:#64748b;">Batal</button></div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#fCancel').onclick = function () { m.remove(); };
+    m.querySelector('#fSave').onclick = async function () {
+      var data = {
+        name: m.querySelector('#fName').value.trim(),
+        gender: m.querySelector('#fGender').value || null,
+        birth_date: m.querySelector('#fBirth').value || null,
+        death_date: m.querySelector('#fDeath').value || null,
+        marital_status: m.querySelector('#fStatus').value || null,
+        bio: m.querySelector('#fBio').value || null
+      };
+      if (!data.name) { alert('Nama wajib diisi.'); return; }
+      try {
+        var pid;
+        if (p) {
+          var u = await SB.from('family_members').update(data).eq('id', p.id);
+          if (u.error) throw u.error;
+          pid = p.id;
+        } else {
+          var ins = await SB.from('family_members').insert(data).select();
+          if (ins.error) throw ins.error;
+          pid = ins.data && ins.data[0] ? ins.data[0].id : null;
+        }
+        var file = m.querySelector('#fPhoto').files[0];
+        if (file && pid) {
+          var ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+          if (['jpg','jpeg','png','webp','gif'].indexOf(ext) < 0) ext = 'jpg';
+          var path = pid + '.' + ext;
+          var up = await SB.storage.from('photos').upload(path, file, { upsert: true, contentType: file.type });
+          if (up.error) throw up.error;
+          var url = SB.storage.from('photos').getPublicUrl(path).data.publicUrl;
+          var u2 = await SB.from('family_members').update({ photo_url: url }).eq('id', pid);
+          if (u2.error) throw u2.error;
+        }
+        m.remove(); await refresh();
+        if (p) openPanel(p.id);
+      } catch (e) { alert('Gagal simpan: ' + (e.message || e)); }
+    };
+  }
+})();
+</script>
+</body>
+</html>
