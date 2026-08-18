@@ -6,10 +6,33 @@
 <title>Family Tree — Keluarga Besar</title>
 <link rel="stylesheet" href="style.css">
 <script src="supabase-config.js?v=3"></script>
+<style>
+.ft-card{position:absolute;width:175px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:10px;text-align:center;cursor:pointer;font-family:sans-serif;box-sizing:border-box;}
+body.dark .ft-card{background:#111c26;border-color:#344451;color:#edf3f8;}
+.ft-avatar{width:40px;height:40px;border-radius:50%;background:#10b981;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 5px;font-weight:700;font-size:14px;}
+.ft-name{font-size:13px;font-weight:700;line-height:1.2;}
+.ft-years{font-size:11px;color:#64748b;margin-top:2px;}
+.ft-age{font-size:11px;margin-top:2px;font-weight:600;color:#059669;}
+.ft-age.dead{color:#64748b;}
+body.dark .ft-age{color:#34d399;}
+body.dark .ft-age.dead{color:#94a3b8;}
+.ft-status{font-size:11px;margin-top:3px;font-weight:600;}
+.ft-panel{position:fixed;top:0;right:0;bottom:0;width:340px;max-width:92vw;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.18);z-index:5000;overflow:auto;padding:20px;font-family:sans-serif;}
+body.dark .ft-panel{background:#0d141c;color:#edf3f8;}
+.ft-panel h2{margin:0 0 4px;font-size:20px;}
+.ft-panel .muted{color:#64748b;font-size:12px;}
+.ft-panel h4{margin:16px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#64748b;}
+.ft-link{display:block;padding:6px 8px;margin:2px 0;background:#f1f5f9;border-radius:8px;cursor:pointer;font-size:13px;}
+body.dark .ft-link{background:#16222e;}
+.ft-close{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;}
+.ft-searchres{position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #e2e8f0;border-radius:10px;z-index:4000;max-height:220px;overflow:auto;display:none;}
+body.dark .ft-searchres{background:#111c26;color:#edf3f8;}
+.ft-searchres div{padding:8px 12px;cursor:pointer;font-size:14px;}
+.ft-searchres div:hover{background:#f1f5f9;}
+</style>
 </head>
 <body>
 
-<!-- ========== LOGIN OVERLAY ========== -->
 <div id="login-overlay" class="login-overlay">
   <div class="login-card">
     <div class="login-logo">🌳</div>
@@ -26,117 +49,325 @@
     <p class="login-footer">Hanya anggota keluarga yang terdaftar yang dapat masuk.</p>
   </div>
 </div>
-<!-- ========== END LOGIN OVERLAY ========== -->
 
 <header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar</h1></div><div class="top-actions"><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
 
 <main>
 <section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Klik anggota untuk melihat pasangan, orang tua, saudara, dan anak. Gunakan zoom atau geser area pohon.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
-<section class="toolbar"><div class="search-wrap"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="search-results hidden"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button></div></section>
-<section id="treeViewport" class="tree-viewport"><div id="treeCanvas" class="tree-canvas"></div><div class="hint">Geser untuk melihat cabang lain • Scroll untuk zoom</div></section>
+<section class="toolbar"><div class="search-wrap" style="position:relative;"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="ft-searchres"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button></div></section>
+<section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;transform-origin:0 0;"></div><div class="hint">Geser untuk melihat cabang lain • Scroll untuk zoom</div></section>
 </main>
 
-<aside id="profilePanel" class="panel"><button id="closePanel" class="close">×</button><div id="profileContent"></div></aside>
-<div id="overlay" class="overlay hidden"></div>
-
 <script>
-// ============ LOGIKA FINAL — SEMUA DI DALAM HTML, ANTI CACHE ============
 (function () {
   var loginOverlay = document.getElementById('login-overlay');
-  var loginForm    = document.getElementById('login-form');
-  var loginBtn     = document.getElementById('login-btn');
-  var loginError   = document.getElementById('login-error');
-  var emailInput   = document.getElementById('login-email');
-  var passInput    = document.getElementById('login-password');
+  var loginForm = document.getElementById('login-form');
+  var loginBtn = document.getElementById('login-btn');
+  var loginError = document.getElementById('login-error');
+  var emailInput = document.getElementById('login-email');
+  var passInput = document.getElementById('login-password');
   var client = null;
+
+  var STATUS = {
+    single:   { label: 'Lajang',     emoji: '' },
+    married:  { label: 'Menikah',    emoji: '💍' },
+    divorced: { label: 'Cerai',      emoji: '💔' },
+    widowed:  { label: 'Janda/Duda', emoji: '🕊' }
+  };
 
   async function getClient() {
     if (client) return client;
     var lib = null;
-    if (window.supabase && window.supabase.createClient) {
-      lib = window.supabase;
-    } else {
-      var sources = [
-        'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm',
-        'https://esm.sh/@supabase/supabase-js@2'
-      ];
-      for (var i = 0; i < sources.length; i++) {
-        try {
-          var mod = await import(sources[i]);
-          if (mod && mod.createClient) { lib = mod; break; }
-        } catch (e) { /* coba sumber berikutnya */ }
+    if (window.supabase && window.supabase.createClient) { lib = window.supabase; }
+    else {
+      var src = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm','https://esm.sh/@supabase/supabase-js@2'];
+      for (var i = 0; i < src.length; i++) {
+        try { var mod = await import(src[i]); if (mod && mod.createClient) { lib = mod; break; } } catch (e) {}
       }
     }
-    if (!lib) throw new Error('Library Supabase gagal dimuat. Periksa internet.');
-    if (typeof SUPABASE_URL === 'undefined' || typeof SUPABASE_PUBLISHABLE_KEY === 'undefined') {
-      throw new Error('supabase-config.js tidak termuat.');
-    }
+    if (!lib) throw new Error('Library Supabase gagal dimuat.');
     client = lib.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
     return client;
   }
 
+  function banner(name, role) {
+    var b = document.createElement('div');
+    b.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:12px 20px;border-radius:8px;font-family:sans-serif;font-size:14px;z-index:6000;box-shadow:0 4px 12px rgba(0,0,0,.15);';
+    b.innerHTML = 'Halo, <b>' + (name || 'Anggota Keluarga') + '</b> — Login sebagai ' + (role === 'admin' ? '👑 Admin' : '👁 Viewer');
+    document.body.appendChild(b);
+  }
+
   loginForm.addEventListener('submit', async function (e) {
-    e.preventDefault(); // alamat TIDAK akan berubah jadi "?"
+    e.preventDefault();
     loginError.textContent = '';
-    loginBtn.disabled = true;
-    loginBtn.textContent = 'Memproses...';
+    loginBtn.disabled = true; loginBtn.textContent = 'Memproses...';
     try {
       var sb = await getClient();
-      var res = await sb.auth.signInWithPassword({
-        email: emailInput.value.trim(),
-        password: passInput.value
-      });
-      if (res.error) {
-        loginError.textContent = translateAuthError(res.error.message);
-        loginBtn.disabled = false;
-        loginBtn.textContent = 'Masuk';
-        return;
-      }
+      var res = await sb.auth.signInWithPassword({ email: emailInput.value.trim(), password: passInput.value });
+      if (res.error) { loginError.textContent = res.error.message; loginBtn.disabled = false; loginBtn.textContent = 'Masuk'; return; }
       var prof = await sb.from('profiles').select('role, full_name').eq('id', res.data.user.id).single();
-      if (prof.error || !prof.data) {
-        loginError.textContent = 'Profil tidak ditemukan. Hubungi admin.';
-        loginBtn.disabled = false;
-        loginBtn.textContent = 'Masuk';
-        return;
-      }
+      if (prof.error || !prof.data) { loginError.textContent = 'Profil tidak ditemukan. (' + (prof.error ? prof.error.message : '-') + ')'; loginBtn.disabled = false; loginBtn.textContent = 'Masuk'; return; }
       loginOverlay.classList.add('hidden');
-      showWelcomeBanner(prof.data.full_name, prof.data.role);
+      banner(prof.data.full_name, prof.data.role);
+      enterApp(sb);
     } catch (err) {
       loginError.textContent = 'Error: ' + (err && err.message ? err.message : err);
-      loginBtn.disabled = false;
-      loginBtn.textContent = 'Masuk';
+      loginBtn.disabled = false; loginBtn.textContent = 'Masuk';
     }
   });
 
-  // Auto-login kalau session masih aktif
   (async function () {
     try {
       var sb = await getClient();
       var s = await sb.auth.getSession();
       if (s.data && s.data.session) {
         var prof = await sb.from('profiles').select('role, full_name').eq('id', s.data.session.user.id).single();
-        if (prof.data) {
-          loginOverlay.classList.add('hidden');
-          showWelcomeBanner(prof.data.full_name, prof.data.role);
-        }
+        if (prof.data) { loginOverlay.classList.add('hidden'); banner(prof.data.full_name, prof.data.role); enterApp(sb); }
       }
-    } catch (e) { /* biarkan */ }
+    } catch (e) {}
   })();
 
-  function translateAuthError(msg) {
-    var map = {
-      'Invalid login credentials': 'Email atau password salah.',
-      'Email not confirmed': 'Email belum dikonfirmasi.',
-      'Rate limit exceeded': 'Terlalu banyak percobaan. Coba lagi sebentar.'
-    };
-    return map[msg] || msg;
+  var members = [], rels = [], byId = {};
+  var scale = 1, panX = 20, panY = 20;
+  var CARD_W = 175, CARD_H = 132, GAP_X = 55, ROW_H = 215;
+  var uiWired = false;
+
+  function spousesOf(id) { return rels.filter(function (r) { return r.rel_type === 'spouse' && (r.person_a === id || r.person_b === id); }); }
+  function parentsOf(id) { return rels.filter(function (r) { return r.rel_type === 'parent_child' && r.person_b === id; }).map(function (r) { return r.person_a; }); }
+  function childrenOf(id) { return rels.filter(function (r) { return r.rel_type === 'parent_child' && r.person_a === id; }).map(function (r) { return r.person_b; }); }
+
+  function ageOf(p) {
+    if (!p.birth_date) return null;
+    var b = new Date(p.birth_date);
+    var end = p.death_date ? new Date(p.death_date) : new Date();
+    var a = end.getFullYear() - b.getFullYear();
+    var m = end.getMonth() - b.getMonth();
+    if (m < 0 || (m === 0 && end.getDate() < b.getDate())) a--;
+    return a;
   }
 
-  function showWelcomeBanner(name, role) {
-    var b = document.createElement('div');
-    b.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:12px 20px;border-radius:8px;font-family:sans-serif;font-size:14px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.15);';
-    b.innerHTML = 'Halo, <b>' + (name || 'Anggota Keluarga') + '</b> — Login sebagai ' + (role === 'admin' ? '👑 Admin' : '👁 Viewer');
-    document.body.appendChild(b);
+  async function enterApp(sb) {
+    try {
+      var m = await sb.from('family_members').select('*');
+      if (m.error) throw m.error;
+      var r = await sb.from('family_relationships').select('*');
+      if (r.error) throw r.error;
+      members = m.data || []; rels = r.data || [];
+      byId = {}; members.forEach(function (p) { byId[p.id] = p; });
+      render();
+      wireUI();
+    } catch (e) {
+      document.getElementById('treeCanvas').innerHTML = '<div style="padding:30px;color:#b91c1c;font-family:sans-serif;">Gagal memuat data: ' + (e.message || e) + '</div>';
+    }
+  }
+
+  function render() {
+    var canvas = document.getElementById('treeCanvas');
+    canvas.innerHTML = '';
+    if (!members.length) { canvas.innerHTML = '<div style="padding:30px;font-family:sans-serif;">Belum ada data anggota.</div>'; return; }
+
+    var memo = {};
+    function genOf(id, seen) {
+      if (memo[id] !== undefined) return memo[id];
+      seen = seen || {}; if (seen[id]) return 1; seen[id] = true;
+      var g = 1, ps = parentsOf(id);
+      for (var i = 0; i < ps.length; i++) g = Math.max(g, genOf(ps[i], seen) + 1);
+      memo[id] = g; return g;
+    }
+    var dgen = {};
+    members.forEach(function (p) { dgen[p.id] = genOf(p.id); });
+    rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) { var g = Math.max(dgen[r.person_a], dgen[r.person_b]); dgen[r.person_a] = g; dgen[r.person_b] = g; });
+    for (var k = 0; k < 2; k++) rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) { dgen[r.person_b] = Math.max(dgen[r.person_b], dgen[r.person_a] + 1); });
+    rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) { var g = Math.max(dgen[r.person_a], dgen[r.person_b]); dgen[r.person_a] = g; dgen[r.person_b] = g; });
+
+    var placed = {}, pos = {}, slotByGen = {};
+    function nextSlot(g) { slotByGen[g] = (slotByGen[g] || 0) + 1; return slotByGen[g] - 1; }
+    var queue = members.filter(function (p) { return parentsOf(p.id).length === 0; }).map(function (p) { return p.id; });
+    function place(id) {
+      if (placed[id]) return;
+      placed[id] = true;
+      var g = dgen[id];
+      pos[id] = { g: g, s: nextSlot(g) };
+      spousesOf(id).forEach(function (r) {
+        var sp = r.person_a === id ? r.person_b : r.person_a;
+        if (!placed[sp]) { placed[sp] = true; dgen[sp] = g; pos[sp] = { g: g, s: nextSlot(g) }; }
+      });
+      childrenOf(id).forEach(function (ch) { queue.push(ch); });
+    }
+    while (queue.length) place(queue.shift());
+    members.forEach(function (p) { if (!placed[p.id]) place(p.id); });
+
+    function X(id) { return pos[id].s * (CARD_W + GAP_X) + 20; }
+    function Y(id) { return (pos[id].g - 1) * ROW_H + 20; }
+
+    var maxW = 0, maxG = 0;
+    members.forEach(function (p) { maxW = Math.max(maxW, X(p.id) + CARD_W); maxG = Math.max(maxG, pos[p.id].g); });
+    var W = maxW + 40, H = maxG * ROW_H + 60;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', W); svg.setAttribute('height', H);
+    svg.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;';
+    function line(x1, y1, x2, y2, color, dash) {
+      var l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+      l.setAttribute('stroke', color); l.setAttribute('stroke-width', 2);
+      if (dash) l.setAttribute('stroke-dasharray', '6 4');
+      svg.appendChild(l);
+    }
+    function label(x, y, txt, color) {
+      var t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', x); t.setAttribute('y', y);
+      t.setAttribute('fill', color); t.setAttribute('font-size', '14');
+      t.setAttribute('text-anchor', 'middle'); t.setAttribute('font-weight', 'bold');
+      t.textContent = txt; svg.appendChild(t);
+    }
+
+    rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) {
+      if (!pos[r.person_a] || !pos[r.person_b]) return;
+      var a = r.person_a, b = r.person_b;
+      if (X(a) > X(b)) { var t = a; a = b; b = t; }
+      var y = Y(a) + CARD_H / 2;
+      var st = r.marriage_status;
+      var color = st === 'divorced' ? '#ef4444' : (st === 'widowed' ? '#94a3b8' : '#10b981');
+      line(X(a) + CARD_W, y, X(b), y, color, st === 'divorced');
+      var mx = (X(a) + CARD_W + X(b)) / 2;
+      label(mx, y - 6, st === 'divorced' ? '//' : (st === 'widowed' ? '🕊' : '♥'), color);
+    });
+
+    members.forEach(function (ch) {
+      var ps = parentsOf(ch.id).filter(function (p) { return pos[p]; });
+      if (!ps.length || !pos[ch.id]) return;
+      var ax = 0; ps.forEach(function (p) { ax += X(p) + CARD_W / 2; }); ax = ax / ps.length;
+      var py = Math.max.apply(null, ps.map(function (p) { return Y(p); })) + CARD_H;
+      var cx = X(ch.id) + CARD_W / 2, cy = Y(ch.id);
+      var my = (py + cy) / 2;
+      line(ax, py, ax, my, '#94a3b8');
+      line(ax, my, cx, my, '#94a3b8');
+      line(cx, my, cx, cy, '#94a3b8');
+    });
+    canvas.appendChild(svg);
+
+    members.forEach(function (p) {
+      var d = document.createElement('div');
+      d.className = 'ft-card';
+      d.style.left = X(p.id) + 'px'; d.style.top = Y(p.id) + 'px'; d.style.height = CARD_H + 'px';
+      var st = STATUS[p.marital_status];
+      var age = ageOf(p);
+      var yrs = (p.birth_date ? p.birth_date.slice(0, 4) : '') + (p.death_date ? ' — ' + p.death_date.slice(0, 4) : (p.birth_date ? ' —' : ''));
+      var ageHtml = '';
+      if (age !== null) {
+        ageHtml = p.death_date
+          ? '<div class="ft-age dead">Wafat usia ' + age + ' th</div>'
+          : '<div class="ft-age">Usia ' + age + ' th</div>';
+      }
+      d.innerHTML = '<div class="ft-avatar">' + initials(p.name) + '</div>' +
+        '<div class="ft-name">' + esc(p.name) + '</div>' +
+        '<div class="ft-years">' + yrs + '</div>' + ageHtml +
+        (st ? '<div class="ft-status">' + st.emoji + ' ' + st.label + '</div>' : '');
+      d.onclick = function () { openPanel(p.id); };
+      canvas.appendChild(d);
+    });
+
+    document.getElementById('memberCount').textContent = members.length;
+    document.getElementById('generationCount').textContent = maxG;
+    scale = 1; panX = 20; panY = 20; applyTransform();
+  }
+
+  function initials(n) {
+    return (n || '?').split(/\s+/).slice(0, 2).map(function (x) { return x[0]; }).join('').toUpperCase();
+  }
+  function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+  function applyTransform() {
+    document.getElementById('treeCanvas').style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + scale + ')';
+  }
+  function zoom(f) { scale = Math.max(0.3, Math.min(2, scale * f)); applyTransform(); }
+  function fit() {
+    var vp = document.getElementById('treeViewport');
+    var c = document.getElementById('treeCanvas');
+    var r = vp.getBoundingClientRect();
+    var w = parseFloat(c.style.width) || 1, h = parseFloat(c.style.height) || 1;
+    scale = Math.max(0.3, Math.min(1, r.width / (w + 40), r.height / (h + 40)));
+    panX = Math.max(10, (r.width - w * scale) / 2); panY = 12;
+    applyTransform();
+  }
+
+  function wireUI() {
+    if (uiWired) return; uiWired = true;
+    document.getElementById('zoomIn').onclick = function () { zoom(1.15); };
+    document.getElementById('zoomOut').onclick = function () { zoom(0.87); };
+    document.getElementById('fitBtn').onclick = fit;
+    document.getElementById('resetBtn').onclick = fit;
+    document.getElementById('fullBtn').onclick = function () {
+      var vp = document.getElementById('treeViewport');
+      if (document.fullscreenElement) document.exitFullscreen(); else vp.requestFullscreen();
+    };
+    document.getElementById('themeBtn').onclick = function () { document.body.classList.toggle('dark'); };
+    var vp = document.getElementById('treeViewport');
+    vp.onwheel = function (e) { e.preventDefault(); zoom(e.deltaY < 0 ? 1.08 : 0.93); };
+    var drag = false, sx, sy, ox, oy;
+    vp.onpointerdown = function (e) { drag = true; sx = e.clientX; sy = e.clientY; ox = panX; oy = panY; };
+    window.onpointermove = function (e) { if (!drag) return; panX = ox + (e.clientX - sx); panY = oy + (e.clientY - sy); applyTransform(); };
+    window.onpointerup = function () { drag = false; };
+
+    var si = document.getElementById('searchInput'), sr = document.getElementById('searchResults');
+    si.oninput = function () {
+      var q = si.value.toLowerCase();
+      if (!q) { sr.style.display = 'none'; return; }
+      var hit = members.filter(function (p) { return p.name.toLowerCase().indexOf(q) >= 0; }).slice(0, 8);
+      sr.innerHTML = '';
+      hit.forEach(function (p) {
+        var d = document.createElement('div');
+        d.textContent = p.name;
+        d.onclick = function () { sr.style.display = 'none'; si.value = ''; openPanel(p.id); };
+        sr.appendChild(d);
+      });
+      sr.style.display = hit.length ? 'block' : 'none';
+    };
+    fit();
+  }
+
+  function openPanel(id) {
+    var p = byId[id]; if (!p) return;
+    var old = document.getElementById('ftPanel'); if (old) old.remove();
+    var st = STATUS[p.marital_status];
+    var age = ageOf(p);
+    var html = '<button class="ft-close" onclick="this.parentNode.remove()">×</button>';
+    html += '<h2>' + esc(p.name) + '</h2>';
+    html += '<div class="muted">' + (p.gender === 'male' ? 'Laki-laki' : p.gender === 'female' ? 'Perempuan' : '') + '</div>';
+    html += '<div class="muted">' + (p.birth_date ? p.birth_date.slice(0, 4) : '?') + ' — ' + (p.death_date ? p.death_date.slice(0, 4) : '') + '</div>';
+    if (age !== null) html += '<div class="muted">' + (p.death_date ? 'Wafat usia ' + age + ' tahun' : 'Usia ' + age + ' tahun') + '</div>';
+    if (st) html += '<div class="ft-status" style="margin-top:8px;font-size:13px;">' + st.emoji + ' ' + st.label + '</div>';
+    if (p.bio) html += '<p style="font-size:13px;">' + esc(p.bio) + '</p>';
+
+    var sp = spousesOf(id);
+    if (sp.length) {
+      html += '<h4>Pasangan</h4>';
+      sp.forEach(function (r) {
+        var o = byId[r.person_a === id ? r.person_b : r.person_a]; if (!o) return;
+        var info = r.marriage_status === 'divorced' ? '💔 Cerai' + (r.divorce_date ? ' ' + r.divorce_date.slice(0, 4) : '') : (r.marriage_status === 'widowed' ? '🕊' : '♥' + (r.marriage_date ? ' ' + r.marriage_date.slice(0, 4) : ''));
+        html += '<div class="ft-link" data-goto="' + o.id + '">' + esc(o.name) + ' <span class="muted">' + info + '</span></div>';
+      });
+    }
+    var ps = parentsOf(id);
+    if (ps.length) {
+      html += '<h4>Orang Tua</h4>';
+      ps.forEach(function (pid) { if (byId[pid]) html += '<div class="ft-link" data-goto="' + pid + '">' + esc(byId[pid].name) + '</div>'; });
+    }
+    var ch = childrenOf(id);
+    if (ch.length) {
+      html += '<h4>Anak</h4>';
+      ch.forEach(function (cid) { if (byId[cid]) html += '<div class="ft-link" data-goto="' + cid + '">' + esc(byId[cid].name) + '</div>'; });
+    }
+    var panel = document.createElement('div');
+    panel.id = 'ftPanel'; panel.className = 'ft-panel';
+    panel.innerHTML = html;
+    panel.onclick = function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('[data-goto]') : null;
+      if (t) openPanel(t.getAttribute('data-goto'));
+    };
+    document.body.appendChild(panel);
   }
 })();
 </script>
