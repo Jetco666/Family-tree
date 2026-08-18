@@ -6,13 +6,19 @@
 <title>Family Tree — Keluarga Besar</title>
 <link rel="stylesheet" href="style.css">
 <script src="supabase-config.js?v=3"></script>
+<script>
+window.addEventListener('error', function (e) {
+  var el = document.getElementById('login-error');
+  if (el) el.textContent = '⚠ Error skrip: ' + e.message + ' (baris ' + e.lineno + ')';
+}, true);
+</script>
 <style>
 .ft-card{position:absolute;width:175px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:10px;text-align:center;cursor:pointer;font-family:sans-serif;box-sizing:border-box;}
 body.dark .ft-card{background:#111c26;border-color:#344451;color:#edf3f8;}
-.ft-avatar{width:44px;height:44px;border-radius:50%;background:#10b981;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 5px;font-weight:700;font-size:14px;overflow:hidden;}
+.ft-avatar{width:40px;height:40px;border-radius:50%;background:#10b981;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 5px;font-weight:700;font-size:14px;overflow:hidden;}
 .ft-avatar img{width:100%;height:100%;object-fit:cover;}
 .ft-name{font-size:13px;font-weight:700;line-height:1.2;}
-.ft-years{font-size:11px;color:#64748b;margin-top:2px;}
+.ft-years{font-size:10px;color:#64748b;margin-top:2px;line-height:1.35;}
 .ft-age{font-size:11px;margin-top:2px;font-weight:600;color:#059669;}
 .ft-age.dead{color:#64748b;}
 body.dark .ft-age{color:#34d399;} body.dark .ft-age.dead{color:#94a3b8;}
@@ -107,6 +113,14 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     divorced: { label: 'Cerai',      emoji: '💔' },
     widowed:  { label: 'Janda/Duda', emoji: '🕊' }
   };
+
+  var BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso).slice(0, 10);
+    return d.getDate() + ' ' + BULAN[d.getMonth()] + ' ' + d.getFullYear();
+  }
 
   document.getElementById('show-req').onclick = function () {
     loginForm.style.display = 'none'; reqForm.style.display = 'flex';
@@ -212,7 +226,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     } catch (e) {}
   })();
 
-  // ================= PRESENCE: siapa yang sedang online =================
   function setupPresence(sb, user, name, role) {
     try {
       presenceChannel = sb.channel('family-presence', { config: { presence: { key: user.id } } });
@@ -282,7 +295,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
 
   var members = [], rels = [], byId = {};
   var scale = 1, panX = 20, panY = 20;
-  var CARD_W = 175, CARD_H = 132, GAP_X = 55, ROW_H = 215;
+  var CARD_W = 175, CARD_H = 140, GAP_X = 55, ROW_H = 225;
   var uiWired = false;
 
   function spousesOf(id) { return rels.filter(function (r) { return r.rel_type === 'spouse' && (r.person_a === id || r.person_b === id); }); }
@@ -412,7 +425,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       d.style.left = X(p.id) + 'px'; d.style.top = Y(p.id) + 'px'; d.style.height = CARD_H + 'px';
       var st = STATUS[p.marital_status];
       var age = ageOf(p);
-      var yrs = (p.birth_date ? p.birth_date.slice(0, 4) : '') + (p.death_date ? ' — ' + p.death_date.slice(0, 4) : (p.birth_date ? ' —' : ''));
+      var yrs = (p.birth_date ? fmtDate(p.birth_date) : '') + (p.death_date ? ' — ' + fmtDate(p.death_date) : (p.birth_date ? ' —' : ''));
       var ageHtml = '';
       if (age !== null) ageHtml = p.death_date ? '<div class="ft-age dead">Wafat usia ' + age + ' th</div>' : '<div class="ft-age">Usia ' + age + ' th</div>';
       var av = p.photo_url ? '<img src="' + escAttr(p.photo_url) + '" alt="">' : initials(p.name);
@@ -543,8 +556,9 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     if (p.photo_url) html += '<img class="ft-photo-big" src="' + escAttr(p.photo_url) + '" alt="">';
     html += '<h2>' + esc(p.name) + '</h2>';
     html += '<div class="muted">' + (p.gender === 'male' ? 'Laki-laki' : p.gender === 'female' ? 'Perempuan' : '') + '</div>';
-    html += '<div class="muted">' + (p.birth_date ? p.birth_date.slice(0, 4) : '?') + ' — ' + (p.death_date ? p.death_date.slice(0, 4) : '') + '</div>';
-    if (age !== null) html += '<div class="muted">' + (p.death_date ? 'Wafat usia ' + age + ' tahun' : 'Usia ' + age + ' tahun') + '</div>';
+    if (p.birth_date) html += '<div class="muted">🎂 Lahir: ' + fmtDate(p.birth_date) + '</div>';
+    if (p.death_date) html += '<div class="muted">🕊 Wafat: ' + fmtDate(p.death_date) + (age !== null ? ' (usia ' + age + ' tahun)' : '') + '</div>';
+    else if (age !== null) html += '<div class="muted">Usia ' + age + ' tahun</div>';
     if (st) html += '<div class="ft-status" style="margin-top:8px;font-size:13px;">' + st.emoji + ' ' + st.label + '</div>';
     if (p.bio) html += '<p style="font-size:13px;">' + esc(p.bio) + '</p>';
 
@@ -553,7 +567,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       html += '<h4>Pasangan</h4>';
       sp.forEach(function (r) {
         var o = byId[r.person_a === id ? r.person_b : r.person_a]; if (!o) return;
-        var info = r.marriage_status === 'divorced' ? '💔 Cerai' + (r.divorce_date ? ' ' + r.divorce_date.slice(0, 4) : '') : (r.marriage_status === 'widowed' ? '🕊' : '♥' + (r.marriage_date ? ' ' + r.marriage_date.slice(0, 4) : ''));
+        var info = r.marriage_status === 'divorced' ? '💔 Cerai' + (r.divorce_date ? ' ' + fmtDate(r.divorce_date) : '') : (r.marriage_status === 'widowed' ? '🕊' : '♥' + (r.marriage_date ? ' ' + fmtDate(r.marriage_date) : ''));
         html += '<div class="ft-link" data-goto="' + o.id + '">' + esc(o.name) + ' <span class="muted">' + info + '</span>' + (isAdmin ? '<span class="ft-x" data-unlink="' + r.id + '" title="Putuskan hubungan">×</span>' : '') + '</div>';
       });
     }
