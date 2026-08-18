@@ -9,7 +9,8 @@
 <style>
 .ft-card{position:absolute;width:175px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:10px;text-align:center;cursor:pointer;font-family:sans-serif;box-sizing:border-box;}
 body.dark .ft-card{background:#111c26;border-color:#344451;color:#edf3f8;}
-.ft-avatar{width:40px;height:40px;border-radius:50%;background:#10b981;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 5px;font-weight:700;font-size:14px;}
+.ft-avatar{width:44px;height:44px;border-radius:50%;background:#10b981;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 5px;font-weight:700;font-size:14px;overflow:hidden;}
+.ft-avatar img{width:100%;height:100%;object-fit:cover;}
 .ft-name{font-size:13px;font-weight:700;line-height:1.2;}
 .ft-years{font-size:11px;color:#64748b;margin-top:2px;}
 .ft-age{font-size:11px;margin-top:2px;font-weight:600;color:#059669;}
@@ -25,6 +26,7 @@ body.dark .ft-panel{background:#0d141c;color:#edf3f8;}
 body.dark .ft-link{background:#16222e;}
 .ft-close{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;}
 .ft-x{color:#ef4444;cursor:pointer;font-weight:700;margin-left:6px;}
+.ft-photo-big{width:84px;height:84px;border-radius:50%;object-fit:cover;margin:8px 0;display:block;}
 .ft-searchres{position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #e2e8f0;border-radius:10px;z-index:4000;max-height:220px;overflow:auto;display:none;}
 body.dark .ft-searchres{background:#111c26;color:#edf3f8;}
 .ft-searchres div{padding:8px 12px;cursor:pointer;font-size:14px;}
@@ -36,6 +38,7 @@ body.dark .ft-modal-card{background:#0d141c;color:#edf3f8;}
 .ft-modal-card label{display:block;font-size:12px;font-weight:600;margin:10px 0 4px;color:#475569;}
 .ft-modal-card input,.ft-modal-card select,.ft-modal-card textarea{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;}
 body.dark .ft-modal-card input,body.dark .ft-modal-card select,body.dark .ft-modal-card textarea{background:#111c26;border-color:#344451;color:#edf3f8;}
+.ft-photo-preview{width:64px;height:64px;border-radius:50%;object-fit:cover;margin:6px 0;display:block;}
 .ft-relbox{display:flex;flex-direction:column;gap:6px;margin:8px 0;padding:10px;background:#f8fafc;border-radius:10px;}
 body.dark .ft-relbox{background:#16222e;}
 .ft-relbox select,.ft-relbox input{padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;}
@@ -276,7 +279,8 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       var yrs = (p.birth_date ? p.birth_date.slice(0, 4) : '') + (p.death_date ? ' — ' + p.death_date.slice(0, 4) : (p.birth_date ? ' —' : ''));
       var ageHtml = '';
       if (age !== null) ageHtml = p.death_date ? '<div class="ft-age dead">Wafat usia ' + age + ' th</div>' : '<div class="ft-age">Usia ' + age + ' th</div>';
-      d.innerHTML = '<div class="ft-avatar">' + initials(p.name) + '</div>' +
+      var av = p.photo_url ? '<img src="' + escAttr(p.photo_url) + '" alt="">' : initials(p.name);
+      d.innerHTML = '<div class="ft-avatar">' + av + '</div>' +
         '<div class="ft-name">' + esc(p.name) + '</div>' +
         '<div class="ft-years">' + yrs + '</div>' + ageHtml +
         (st ? '<div class="ft-status">' + st.emoji + ' ' + st.label + '</div>' : '');
@@ -354,6 +358,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     var st = STATUS[p.marital_status];
     var age = ageOf(p);
     var html = '<button class="ft-close" onclick="this.parentNode.remove()">×</button>';
+    if (p.photo_url) html += '<img class="ft-photo-big" src="' + escAttr(p.photo_url) + '" alt="">';
     html += '<h2>' + esc(p.name) + '</h2>';
     html += '<div class="muted">' + (p.gender === 'male' ? 'Laki-laki' : p.gender === 'female' ? 'Perempuan' : '') + '</div>';
     html += '<div class="muted">' + (p.birth_date ? p.birth_date.slice(0, 4) : '?') + ' — ' + (p.death_date ? p.death_date.slice(0, 4) : '') + '</div>';
@@ -446,6 +451,9 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     var m = document.createElement('div'); m.id = 'ftModal'; m.className = 'ft-modal';
     var stOpts = '<option value="">—</option><option value="single">Lajang</option><option value="married">Menikah</option><option value="divorced">Cerai</option><option value="widowed">Janda/Duda</option>';
     m.innerHTML = '<div class="ft-modal-card"><h3>' + (p ? '✏️ Edit' : '➕ Tambah') + ' Anggota</h3>' +
+      '<label>Foto Profil</label>' +
+      (p && p.photo_url ? '<img id="fPhotoPrev" class="ft-photo-preview" src="' + escAttr(p.photo_url) + '">' : '<img id="fPhotoPrev" class="ft-photo-preview" style="display:none;">') +
+      '<input type="file" id="fPhoto" accept="image/*">' +
       '<label>Nama *</label><input id="fName" value="' + (p ? escAttr(p.name) : '') + '">' +
       '<label>Jenis Kelamin</label><select id="fGender"><option value="">—</option><option value="male"' + (p && p.gender === 'male' ? ' selected' : '') + '>Laki-laki</option><option value="female"' + (p && p.gender === 'female' ? ' selected' : '') + '>Perempuan</option></select>' +
       '<label>Tanggal Lahir</label><input type="date" id="fBirth" value="' + (p && p.birth_date ? p.birth_date.slice(0, 10) : '') + '">' +
@@ -466,8 +474,27 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       };
       if (!data.name) { alert('Nama wajib diisi.'); return; }
       try {
-        if (p) { var u = await SB.from('family_members').update(data).eq('id', p.id); if (u.error) throw u.error; }
-        else { var i = await SB.from('family_members').insert(data); if (i.error) throw i.error; }
+        var pid;
+        if (p) {
+          var u = await SB.from('family_members').update(data).eq('id', p.id);
+          if (u.error) throw u.error;
+          pid = p.id;
+        } else {
+          var ins = await SB.from('family_members').insert(data).select();
+          if (ins.error) throw ins.error;
+          pid = ins.data && ins.data[0] ? ins.data[0].id : null;
+        }
+        var file = m.querySelector('#fPhoto').files[0];
+        if (file && pid) {
+          var ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+          if (['jpg','jpeg','png','webp','gif'].indexOf(ext) < 0) ext = 'jpg';
+          var path = pid + '.' + ext;
+          var up = await SB.storage.from('photos').upload(path, file, { upsert: true, contentType: file.type });
+          if (up.error) throw up.error;
+          var url = SB.storage.from('photos').getPublicUrl(path).data.publicUrl;
+          var u2 = await SB.from('family_members').update({ photo_url: url }).eq('id', pid);
+          if (u2.error) throw u2.error;
+        }
         m.remove(); await refresh();
         if (p) openPanel(p.id);
       } catch (e) { alert('Gagal simpan: ' + (e.message || e)); }
