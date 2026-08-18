@@ -1,10 +1,18 @@
 // ============================================
-// FAMILY TREE V3 — app.js
-// Tahap 4: Login + koneksi Supabase
+// FAMILY TREE V3 — app.js (v3.1 anti silent-fail)
 // ============================================
 
-// Inisialisasi Supabase client
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// ---------- Supabase client (aman, tidak akan crash) ----------
+let supabase = null;
+try {
+  if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  } else {
+    console.error('Library Supabase tidak termuat (CDN).');
+  }
+} catch (err) {
+  console.error('Gagal inisialisasi Supabase:', err);
+}
 
 // Elemen DOM
 const loginOverlay = document.getElementById('login-overlay');
@@ -20,72 +28,85 @@ let currentRole = 'member';
 
 // ---------- LOGIN ----------
 loginForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
+  e.preventDefault(); // SELALU — biar alamat tidak jadi "?"
+
   loginError.textContent = '';
+
+  if (!supabase) {
+    loginError.textContent = 'Koneksi Supabase tidak termuat. Tekan Ctrl+F5 lalu coba lagi.';
+    return;
+  }
+
   loginBtn.disabled = true;
   loginBtn.textContent = 'Memproses...';
 
   const email = emailInput.value.trim();
   const password = passInput.value;
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-  if (error) {
-    loginError.textContent = translateAuthError(error.message);
+    if (error) {
+      loginError.textContent = translateAuthError(error.message);
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Masuk';
+      return;
+    }
+
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('id', data.user.id)
+      .single();
+
+    if (profileErr || !profile) {
+      loginError.textContent = 'Profil tidak ditemukan. Hubungi admin.';
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Masuk';
+      await supabase.auth.signOut();
+      return;
+    }
+
+    currentUser = data.user;
+    currentRole = profile.role;
+
+    console.log('✅ Login sukses:', {
+      email: currentUser.email,
+      role: currentRole,
+      fullName: profile.full_name
+    });
+
+    loginOverlay.classList.add('hidden');
+    showWelcomeBanner(profile.full_name, currentRole);
+  } catch (err) {
+    console.error(err);
+    loginError.textContent = 'Terjadi kesalahan: ' + (err.message || err);
     loginBtn.disabled = false;
     loginBtn.textContent = 'Masuk';
-    return;
   }
-
-  // Ambil role dari profiles
-  const { data: profile, error: profileErr } = await supabase
-    .from('profiles')
-    .select('role, full_name')
-    .eq('id', data.user.id)
-    .single();
-
-  if (profileErr || !profile) {
-    loginError.textContent = 'Profil tidak ditemukan. Hubungi admin.';
-    loginBtn.disabled = false;
-    loginBtn.textContent = 'Masuk';
-    await supabase.auth.signOut();
-    return;
-  }
-
-  currentUser = data.user;
-  currentRole = profile.role;
-
-  console.log('✅ Login sukses:', {
-    email: currentUser.email,
-    role: currentRole,
-    fullName: profile.full_name
-  });
-
-  // Sembunyikan overlay login
-  loginOverlay.classList.add('hidden');
-
-  // Placeholder: tampilkan info sementara di body
-  showWelcomeBanner(profile.full_name, currentRole);
-
-  // TODO Tahap 5: render family tree dari Supabase
 });
 
 // ---------- AUTO-LOGIN (session masih aktif) ----------
 (async () => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, full_name')
-      .eq('id', session.user.id)
-      .single();
+  if (!supabase) return;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session && session.user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, full_name')
+        .eq('id', session.user.id)
+        .single();
 
-    if (profile) {
-      currentUser = session.user;
-      currentRole = profile.role;
-      loginOverlay.classList.add('hidden');
-      showWelcomeBanner(profile.full_name, currentRole);
+      if (profile) {
+        currentUser = session.user;
+        currentRole = profile.role;
+        loginOverlay.classList.add('hidden');
+        showWelcomeBanner(profile.full_name, currentRole);
+      }
     }
+  } catch (err) {
+    console.error('Auto-login gagal:', err);
   }
 })();
 
@@ -102,7 +123,6 @@ function translateAuthError(msg) {
 }
 
 function showWelcomeBanner(name, role) {
-  // Banner sementara — akan diganti UI family tree di Tahap 5
   const banner = document.createElement('div');
   banner.style.cssText = `
     position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
@@ -115,8 +135,7 @@ function showWelcomeBanner(name, role) {
   document.body.appendChild(banner);
 }
 
-// Expose logout untuk dipakai nanti
 window.familyTreeLogout = async () => {
-  await supabase.auth.signOut();
+  if (supabase) await supabase.auth.signOut();
   location.reload();
 };
