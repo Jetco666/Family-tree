@@ -79,7 +79,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
   </div>
 </div>
 
-<header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar</h1></div><div class="top-actions"><button id="reqBtn" class="btn" style="display:none;">🔔 Akses</button><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
+<header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar</h1></div><div class="top-actions"><button id="onlineBtn" class="btn" style="display:none;">👥 Online</button><button id="reqBtn" class="btn" style="display:none;">🔔 Akses</button><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
 
 <main>
 <section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Klik anggota untuk melihat pasangan, orang tua, saudara, dan anak. Gunakan zoom atau geser area pohon.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
@@ -99,6 +99,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
   var emailInput = document.getElementById('login-email');
   var passInput = document.getElementById('login-password');
   var client = null, SB = null, isAdmin = false;
+  var presenceChannel = null;
 
   var STATUS = {
     single:   { label: 'Lajang',     emoji: '' },
@@ -155,6 +156,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     if (role === 'admin' || role === 'member') {
       isAdmin = role === 'admin';
       loginOverlay.classList.add('hidden');
+      setupPresence(sb, user, name, role);
       enterApp(sb);
     } else if (role === 'rejected') {
       showCardMessage('❌ Maaf, permintaan akses Anda ditolak oleh admin.');
@@ -210,6 +212,74 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     } catch (e) {}
   })();
 
+  // ================= PRESENCE: siapa yang sedang online =================
+  function setupPresence(sb, user, name, role) {
+    try {
+      presenceChannel = sb.channel('family-presence', { config: { presence: { key: user.id } } });
+      presenceChannel.on('presence', { event: 'sync' }, function () {
+        updateOnlineUI();
+        var panel = document.getElementById('ftPanel');
+        if (panel && panel.dataset.mode === 'online') renderOnlineList(panel);
+      }).on('presence', { event: 'join' }, function () {
+        updateOnlineUI();
+        var panel = document.getElementById('ftPanel');
+        if (panel && panel.dataset.mode === 'online') renderOnlineList(panel);
+      }).on('presence', { event: 'leave' }, function () {
+        updateOnlineUI();
+        var panel = document.getElementById('ftPanel');
+        if (panel && panel.dataset.mode === 'online') renderOnlineList(panel);
+      }).subscribe(async function (status) {
+        if (status === 'SUBSCRIBED') {
+          try {
+            await presenceChannel.track({ name: name || '(tanpa nama)', role: role, at: new Date().toISOString() });
+          } catch (e) {}
+        }
+      });
+    } catch (e) { console.warn('Presence tidak aktif:', e); }
+  }
+
+  function presenceEntries() {
+    var out = [];
+    if (!presenceChannel) return out;
+    var st = presenceChannel.presenceState();
+    for (var k in st) {
+      if (Object.prototype.hasOwnProperty.call(st, k)) {
+        var arr = st[k];
+        for (var i = 0; i < arr.length; i++) out.push(arr[i]);
+      }
+    }
+    return out;
+  }
+
+  function updateOnlineUI() {
+    var btn = document.getElementById('onlineBtn');
+    if (!btn || !isAdmin) return;
+    btn.style.display = 'inline-block';
+    btn.textContent = '👥 Online (' + presenceEntries().length + ')';
+  }
+
+  function openOnlinePanel() {
+    var old = document.getElementById('ftPanel'); if (old) old.remove();
+    var panel = document.createElement('div'); panel.id = 'ftPanel'; panel.className = 'ft-panel';
+    panel.dataset.mode = 'online';
+    panel.innerHTML = '<button class="ft-close" onclick="this.parentNode.remove()">×</button><h2>👥 Sedang Online</h2><p class="muted">Terbarui otomatis secara live.</p><div id="onlineList" class="muted">Memuat...</div>';
+    document.body.appendChild(panel);
+    renderOnlineList(panel);
+  }
+
+  function renderOnlineList(panel) {
+    var box = panel.querySelector('#onlineList');
+    if (!box) return;
+    var list = presenceEntries();
+    if (!list.length) { box.textContent = 'Tidak ada user online terdeteksi.'; return; }
+    box.innerHTML = '';
+    list.forEach(function (u) {
+      var d = document.createElement('div'); d.className = 'ft-link';
+      d.innerHTML = (u.role === 'admin' ? '👑 ' : '👁 ') + '<b>' + esc(u.name || '(tanpa nama)') + '</b> <span class="muted">' + (u.role === 'admin' ? 'Admin' : 'Viewer') + '</span>';
+      box.appendChild(d);
+    });
+  }
+
   var members = [], rels = [], byId = {};
   var scale = 1, panX = 20, panY = 20;
   var CARD_W = 175, CARD_H = 132, GAP_X = 55, ROW_H = 215;
@@ -233,7 +303,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     SB = sb;
     try {
       await refresh(); wireUI();
-      if (isAdmin) updateReqCount();
+      if (isAdmin) { updateReqCount(); updateOnlineUI(); }
     } catch (e) {
       document.getElementById('treeCanvas').innerHTML = '<div style="padding:30px;color:#b91c1c;font-family:sans-serif;">Gagal memuat data: ' + (e.message || e) + '</div>';
     }
@@ -398,6 +468,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       var addBtn = document.getElementById('addBtn');
       addBtn.style.display = 'inline-block'; addBtn.onclick = function () { openForm(null); };
       document.getElementById('reqBtn').onclick = function () { openRequests(); };
+      document.getElementById('onlineBtn').onclick = function () { openOnlinePanel(); };
     }
     var vp = document.getElementById('treeViewport');
     vp.onwheel = function (e) { e.preventDefault(); zoom(e.deltaY < 0 ? 1.08 : 0.93); };
