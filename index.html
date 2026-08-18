@@ -1,37 +1,144 @@
-<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Family Tree — Keluarga Besar</title><link rel="stylesheet" href="style.css"><!-- Supabase JS client -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- Config kita -->
-<script src="supabase-config.js?v=3"></script></head><body>
-  <!-- ========== LOGIN OVERLAY (V3) ========== -->
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Family Tree — Keluarga Besar</title>
+<link rel="stylesheet" href="style.css">
+<script src="supabase-config.js?v=3"></script>
+</head>
+<body>
+
+<!-- ========== LOGIN OVERLAY ========== -->
 <div id="login-overlay" class="login-overlay">
   <div class="login-card">
     <div class="login-logo">🌳</div>
     <h1 class="login-title">Silsilah Keluarga</h1>
     <p class="login-subtitle">Masuk untuk melihat pohon keluarga</p>
-
     <form id="login-form" class="login-form">
       <label for="login-email">Email</label>
-      <input type="email" id="login-email" required autocomplete="email"
-             placeholder="nama@keluarga.com" />
-
+      <input type="email" id="login-email" required autocomplete="email" placeholder="nama@keluarga.com">
       <label for="login-password">Password</label>
-      <input type="password" id="login-password" required autocomplete="current-password"
-             placeholder="••••••••••••" minlength="6" />
-
+      <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••••••" minlength="6">
       <button type="submit" id="login-btn" class="login-btn">Masuk</button>
-
       <p id="login-error" class="login-error"></p>
     </form>
-
-    <p class="login-footer">
-      Hanya anggota keluarga yang terdaftar yang dapat masuk.
-    </p>
+    <p class="login-footer">Hanya anggota keluarga yang terdaftar yang dapat masuk.</p>
   </div>
 </div>
 <!-- ========== END LOGIN OVERLAY ========== -->
+
 <header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar</h1></div><div class="top-actions"><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
-<main><section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Klik anggota untuk melihat pasangan, orang tua, saudara, dan anak. Gunakan zoom atau geser area pohon.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
+
+<main>
+<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Klik anggota untuk melihat pasangan, orang tua, saudara, dan anak. Gunakan zoom atau geser area pohon.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
 <section class="toolbar"><div class="search-wrap"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="search-results hidden"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button></div></section>
-<section id="treeViewport" class="tree-viewport"><div id="treeCanvas" class="tree-canvas"></div><div class="hint">Geser untuk melihat cabang lain • Scroll untuk zoom</div></section></main>
-<aside id="profilePanel" class="panel"><button id="closePanel" class="close">×</button><div id="profileContent"></div></aside><div id="overlay" class="overlay hidden"></div>
-<script src="family-data.js"></script><script src="app.js?v=3"></script></body></html>
+<section id="treeViewport" class="tree-viewport"><div id="treeCanvas" class="tree-canvas"></div><div class="hint">Geser untuk melihat cabang lain • Scroll untuk zoom</div></section>
+</main>
+
+<aside id="profilePanel" class="panel"><button id="closePanel" class="close">×</button><div id="profileContent"></div></aside>
+<div id="overlay" class="overlay hidden"></div>
+
+<script>
+// ============ LOGIKA FINAL — SEMUA DI DALAM HTML, ANTI CACHE ============
+(function () {
+  var loginOverlay = document.getElementById('login-overlay');
+  var loginForm    = document.getElementById('login-form');
+  var loginBtn     = document.getElementById('login-btn');
+  var loginError   = document.getElementById('login-error');
+  var emailInput   = document.getElementById('login-email');
+  var passInput    = document.getElementById('login-password');
+  var client = null;
+
+  async function getClient() {
+    if (client) return client;
+    var lib = null;
+    if (window.supabase && window.supabase.createClient) {
+      lib = window.supabase;
+    } else {
+      var sources = [
+        'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm',
+        'https://esm.sh/@supabase/supabase-js@2'
+      ];
+      for (var i = 0; i < sources.length; i++) {
+        try {
+          var mod = await import(sources[i]);
+          if (mod && mod.createClient) { lib = mod; break; }
+        } catch (e) { /* coba sumber berikutnya */ }
+      }
+    }
+    if (!lib) throw new Error('Library Supabase gagal dimuat. Periksa internet.');
+    if (typeof SUPABASE_URL === 'undefined' || typeof SUPABASE_PUBLISHABLE_KEY === 'undefined') {
+      throw new Error('supabase-config.js tidak termuat.');
+    }
+    client = lib.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+    return client;
+  }
+
+  loginForm.addEventListener('submit', async function (e) {
+    e.preventDefault(); // alamat TIDAK akan berubah jadi "?"
+    loginError.textContent = '';
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Memproses...';
+    try {
+      var sb = await getClient();
+      var res = await sb.auth.signInWithPassword({
+        email: emailInput.value.trim(),
+        password: passInput.value
+      });
+      if (res.error) {
+        loginError.textContent = translateAuthError(res.error.message);
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Masuk';
+        return;
+      }
+      var prof = await sb.from('profiles').select('role, full_name').eq('id', res.data.user.id).single();
+      if (prof.error || !prof.data) {
+        loginError.textContent = 'Profil tidak ditemukan. Hubungi admin.';
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Masuk';
+        return;
+      }
+      loginOverlay.classList.add('hidden');
+      showWelcomeBanner(prof.data.full_name, prof.data.role);
+    } catch (err) {
+      loginError.textContent = 'Error: ' + (err && err.message ? err.message : err);
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Masuk';
+    }
+  });
+
+  // Auto-login kalau session masih aktif
+  (async function () {
+    try {
+      var sb = await getClient();
+      var s = await sb.auth.getSession();
+      if (s.data && s.data.session) {
+        var prof = await sb.from('profiles').select('role, full_name').eq('id', s.data.session.user.id).single();
+        if (prof.data) {
+          loginOverlay.classList.add('hidden');
+          showWelcomeBanner(prof.data.full_name, prof.data.role);
+        }
+      }
+    } catch (e) { /* biarkan */ }
+  })();
+
+  function translateAuthError(msg) {
+    var map = {
+      'Invalid login credentials': 'Email atau password salah.',
+      'Email not confirmed': 'Email belum dikonfirmasi.',
+      'Rate limit exceeded': 'Terlalu banyak percobaan. Coba lagi sebentar.'
+    };
+    return map[msg] || msg;
+  }
+
+  function showWelcomeBanner(name, role) {
+    var b = document.createElement('div');
+    b.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:12px 20px;border-radius:8px;font-family:sans-serif;font-size:14px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.15);';
+    b.innerHTML = 'Halo, <b>' + (name || 'Anggota Keluarga') + '</b> — Login sebagai ' + (role === 'admin' ? '👑 Admin' : '👁 Viewer');
+    document.body.appendChild(b);
+  }
+})();
+</script>
+</body>
+</html>
