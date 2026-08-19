@@ -473,6 +473,54 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     btn.textContent = '🔔 Akses' + (c.count ? ' (' + c.count + ')' : '');
   }
 
+  // ================= MANAJEMEN AKSES =================
+  function mkBtn(txt, danger, fn) {
+    var b = document.createElement('button');
+    b.className = 'ft-btn' + (danger ? ' danger' : '');
+    b.textContent = txt; b.style.marginRight = '6px';
+    b.onclick = fn;
+    return b;
+  }
+
+  async function setRole(id, role, panel) {
+    var x = await SB.from('profiles').update({ role: role }).eq('id', id);
+    if (x.error) { alert('Gagal: ' + x.error.message); return; }
+    loadAccessList(panel); updateReqCount();
+  }
+
+  function openAccessPanel() {
+    var old = document.getElementById('ftPanel'); if (old) old.remove();
+    var panel = document.createElement('div'); panel.id = 'ftPanel'; panel.className = 'ft-panel';
+    panel.innerHTML = '<button class="ft-close" onclick="this.parentNode.remove()">×</button><h2>🔐 Manajemen Akses</h2><p class="muted">Semua akun yang pernah mendaftar + status aksesnya.</p><div id="reqList" class="muted">Memuat...</div>';
+    document.body.appendChild(panel);
+    loadAccessList(panel);
+  }
+
+  async function loadAccessList(panel) {
+    var r = await SB.from('profiles').select('id, full_name, email, role, created_at').order('created_at');
+    var box = panel.querySelector('#reqList');
+    if (r.error) { box.textContent = 'Error: ' + r.error.message; return; }
+    if (!r.data.length) { box.textContent = 'Belum ada akun.'; return; }
+    var order = { pending: 0, member: 1, admin: 2, rejected: 3 };
+    var data = r.data.slice().sort(function (a, b) { return (order[a.role] || 9) - (order[b.role] || 9); });
+    box.innerHTML = '';
+    data.forEach(function (u) {
+      var d = document.createElement('div'); d.className = 'ft-link';
+      var badge = u.role === 'admin' ? '👑 Admin' : u.role === 'member' ? '👁 Viewer' : u.role === 'pending' ? '⏳ Menunggu' : '❌ Ditolak';
+      d.innerHTML = '<b>' + esc(u.full_name || '(tanpa nama)') + '</b> <span class="muted">' + badge + '</span>' +
+        '<div class="muted">' + esc(u.email || '') + ' · daftar ' + (u.created_at ? u.created_at.slice(0, 10) : '') + '</div>';
+      if (u.role === 'pending') {
+        d.appendChild(mkBtn('✅ Setujui', false, function () { setRole(u.id, 'member', panel); }));
+        d.appendChild(mkBtn('❌ Tolak', true, function () { setRole(u.id, 'rejected', panel); }));
+      } else if (u.role === 'member') {
+        d.appendChild(mkBtn('🚫 Cabut akses', true, function () { setRole(u.id, 'rejected', panel); }));
+      } else if (u.role === 'rejected') {
+        d.appendChild(mkBtn('♻️ Pulihkan', false, function () { setRole(u.id, 'member', panel); }));
+      }
+      box.appendChild(d);
+    });
+  }
+
   function wireUI() {
     if (uiWired) return; uiWired = true;
     document.getElementById('zoomIn').onclick = function () { zoom(1.15); };
@@ -487,13 +535,12 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     if (isAdmin) {
       var addBtn = document.getElementById('addBtn');
       addBtn.style.display = 'inline-block'; addBtn.onclick = function () { openForm(null); };
-      document.getElementById('reqBtn').onclick = function () { openRequests(); };
+      document.getElementById('reqBtn').onclick = function () { openAccessPanel(); };
       document.getElementById('onlineBtn').onclick = function () { openOnlinePanel(); };
     }
     var vp = document.getElementById('treeViewport');
     vp.onwheel = function (e) { e.preventDefault(); zoom(e.deltaY < 0 ? 1.08 : 0.93); };
 
-    // ----- geser (1 jari / mouse) + cubit-zoom (2 jari) -----
     var pointers = [];
     var drag = false, sx, sy, ox, oy;
     var pinch0 = 0, scale0 = 1;
@@ -538,40 +585,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       sr.style.display = hit.length ? 'block' : 'none';
     };
     fit();
-  }
-
-  function openRequests() {
-    var old = document.getElementById('ftPanel'); if (old) old.remove();
-    var panel = document.createElement('div'); panel.id = 'ftPanel'; panel.className = 'ft-panel';
-    panel.innerHTML = '<button class="ft-close" onclick="this.parentNode.remove()">×</button><h2>🔔 Permintaan Akses</h2><div id="reqList" class="muted">Memuat...</div>';
-    document.body.appendChild(panel);
-    loadReqList(panel);
-  }
-
-  async function loadReqList(panel) {
-    var r = await SB.from('profiles').select('id, full_name, created_at').eq('role', 'pending').order('created_at');
-    var box = panel.querySelector('#reqList');
-    if (r.error) { box.textContent = 'Error: ' + r.error.message; return; }
-    if (!r.data.length) { box.textContent = 'Tidak ada permintaan menunggu.'; return; }
-    box.innerHTML = '';
-    r.data.forEach(function (u) {
-      var d = document.createElement('div'); d.className = 'ft-link';
-      d.innerHTML = '<b>' + esc(u.full_name || '(tanpa nama)') + '</b><div class="muted">Mendaftar ' + (u.created_at ? u.created_at.slice(0, 10) : '') + '</div>';
-      var b1 = document.createElement('button'); b1.className = 'ft-btn'; b1.textContent = '✅ Setujui'; b1.style.marginRight = '6px';
-      b1.onclick = async function () {
-        var x = await SB.from('profiles').update({ role: 'member' }).eq('id', u.id);
-        if (x.error) alert('Gagal: ' + x.error.message);
-        loadReqList(panel); updateReqCount();
-      };
-      var b2 = document.createElement('button'); b2.className = 'ft-btn danger'; b2.textContent = '❌ Tolak';
-      b2.onclick = async function () {
-        var x = await SB.from('profiles').update({ role: 'rejected' }).eq('id', u.id);
-        if (x.error) alert('Gagal: ' + x.error.message);
-        loadReqList(panel); updateReqCount();
-      };
-      d.appendChild(b1); d.appendChild(b2);
-      box.appendChild(d);
-    });
   }
 
   function memberSelect(sid, exclude) {
