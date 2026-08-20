@@ -20,6 +20,8 @@ window.addEventListener('error', function (e) {
   .top-actions .btn{display:inline-block;font-size:11px;padding:6px 8px;}
   .ft-panel{width:100vw;max-width:100vw;}
 }
+.ft-toggle{position:absolute;bottom:-11px;left:50%;transform:translateX(-50%);min-width:26px;height:22px;padding:0 7px;border-radius:11px;background:#334155;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:3;box-shadow:0 1px 4px rgba(0,0,0,.3);}
+body.dark .ft-toggle{background:#7dd3fc;color:#0d141c;}
 .ft-card{position:absolute;width:175px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:10px;text-align:center;cursor:pointer;font-family:sans-serif;box-sizing:border-box;}
 body.dark .ft-card{background:#111c26;border-color:#344451;color:#edf3f8;}
 .ft-avatar{width:40px;height:40px;border-radius:50%;background:#10b981;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 5px;font-weight:700;font-size:14px;overflow:hidden;}
@@ -95,9 +97,9 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
 <header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar</h1></div><div class="top-actions"><button id="onlineBtn" class="btn" style="display:none;">👥 Online</button><button id="reqBtn" class="btn" style="display:none;">🔔 Akses</button><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
 
 <main>
-<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Klik anggota untuk melihat pasangan, orang tua, saudara, dan anak. Gunakan zoom atau geser area pohon.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
+<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Klik anggota untuk profil. Klik tombol <b>+n</b> di bawah kartu untuk membuka keturunan cabang itu, dan <b>−</b> untuk menutupnya.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
 <section class="toolbar"><div class="search-wrap" style="position:relative;"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="ft-searchres"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button><button id="addBtn" class="btn" style="display:none;">+ Tambah Anggota</button></div></section>
-<section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;transform-origin:0 0;"></div><div class="hint">Geser untuk melihat cabang lain • Cubit untuk zoom</div></section>
+<section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;transform-origin:0 0;"></div><div class="hint">Geser untuk melihat cabang lain • Cubit untuk zoom • +n buka keturunan</div></section>
 </main>
 
 <script>
@@ -113,6 +115,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
   var passInput = document.getElementById('login-password');
   var client = null, SB = null, isAdmin = false;
   var presenceChannel = null;
+  var expanded = {};
 
   var STATUS = {
     single:   { label: 'Lajang',     emoji: '' },
@@ -358,9 +361,32 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     for (var k = 0; k < 2; k++) rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) { dgen[r.person_b] = Math.max(dgen[r.person_b], dgen[r.person_a] + 1); });
     rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) { var g = Math.max(dgen[r.person_a], dgen[r.person_b]); dgen[r.person_a] = g; dgen[r.person_b] = g; });
 
+    // ===== V16: hitung anggota yang TERLIHAT (mode buka-tutup) =====
+    var roots = members.filter(function (p) { return parentsOf(p.id).length === 0; });
+    roots.forEach(function (r0) {
+      if (expanded[r0.id] === undefined) expanded[r0.id] = (dgen[r0.id] === 1);
+    });
+    var vis = {};
+    var q0 = roots.map(function (r0) { return r0.id; });
+    q0.forEach(function (id) { vis[id] = true; });
+    while (q0.length) {
+      var vid = q0.shift();
+      spousesOf(vid).forEach(function (r) {
+        var sp = r.person_a === vid ? r.person_b : r.person_a;
+        if (!vis[sp]) { vis[sp] = true; q0.push(sp); }
+      });
+      if (expanded[vid]) {
+        childrenOf(vid).forEach(function (ch) {
+          if (!vis[ch]) { vis[ch] = true; q0.push(ch); }
+        });
+      }
+    }
+    var vmembers = members.filter(function (p) { return vis[p.id]; });
+    // ===== akhir blok V16 =====
+
     var placed = {}, pos = {}, slotByGen = {};
     function nextSlot(g) { slotByGen[g] = (slotByGen[g] || 0) + 1; return slotByGen[g] - 1; }
-    var queue = members.filter(function (p) { return parentsOf(p.id).length === 0; }).map(function (p) { return p.id; });
+    var queue = roots.map(function (r0) { return r0.id; });
     function place(id) {
       if (placed[id]) return;
       placed[id] = true;
@@ -368,18 +394,19 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       pos[id] = { g: g, s: nextSlot(g) };
       spousesOf(id).forEach(function (r) {
         var sp = r.person_a === id ? r.person_b : r.person_a;
-        if (!placed[sp]) { placed[sp] = true; dgen[sp] = g; pos[sp] = { g: g, s: nextSlot(g) }; }
+        if (!placed[sp] && vis[sp]) { placed[sp] = true; pos[sp] = { g: g, s: nextSlot(g) }; }
       });
-      childrenOf(id).forEach(function (ch) { queue.push(ch); });
+      childrenOf(id).forEach(function (ch) { if (vis[ch]) queue.push(ch); });
     }
     while (queue.length) place(queue.shift());
-    members.forEach(function (p) { if (!placed[p.id]) place(p.id); });
+    vmembers.forEach(function (p) { if (!placed[p.id]) place(p.id); });
 
     function X(id) { return pos[id].s * (CARD_W + GAP_X) + 20; }
     function Y(id) { return (pos[id].g - 1) * ROW_H + 20; }
 
-    var maxW = 0, maxG = 0;
-    members.forEach(function (p) { maxW = Math.max(maxW, X(p.id) + CARD_W); maxG = Math.max(maxG, pos[p.id].g); });
+    var maxW = 0, maxG = 0, allMaxG = 0;
+    vmembers.forEach(function (p) { maxW = Math.max(maxW, X(p.id) + CARD_W); maxG = Math.max(maxG, pos[p.id].g); });
+    members.forEach(function (p) { allMaxG = Math.max(allMaxG, dgen[p.id]); });
     var W = maxW + 40, H = maxG * ROW_H + 60;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
 
@@ -413,20 +440,37 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       label(mx, y - 6, st === 'divorced' ? '//' : (st === 'widowed' ? '🕊' : '♥'), color);
     });
 
-    members.forEach(function (ch) {
-      var ps = parentsOf(ch.id).filter(function (p) { return pos[p]; });
-      if (!ps.length || !pos[ch.id]) return;
-      var ax = 0; ps.forEach(function (p) { ax += X(p) + CARD_W / 2; }); ax = ax / ps.length;
-      var py = Math.max.apply(null, ps.map(function (p) { return Y(p); })) + CARD_H;
-      var cx = X(ch.id) + CARD_W / 2, cy = Y(ch.id);
-      var my = (py + cy) / 2;
-      line(ax, py, ax, my, '#94a3b8');
-      line(ax, my, cx, my, '#94a3b8');
-      line(cx, my, cx, cy, '#94a3b8');
+    var groups = {};
+    vmembers.forEach(function (ch) {
+      if (!pos[ch.id]) return;
+      var ps = parentsOf(ch.id).filter(function (p) { return pos[p]; }).slice().sort();
+      if (!ps.length) return;
+      var key = ps.join('|');
+      if (!groups[key]) groups[key] = { ps: ps, ids: [] };
+      groups[key].ids.push(ch.id);
     });
+    var gkeys = Object.keys(groups);
+    for (var gi = 0; gi < gkeys.length; gi++) {
+      var grp = groups[gkeys[gi]];
+      var ax = 0;
+      grp.ps.forEach(function (p) { ax += X(p) + CARD_W / 2; });
+      ax /= grp.ps.length;
+      var py = Math.max.apply(null, grp.ps.map(function (p) { return Y(p); })) + CARD_H;
+      var cy = Y(grp.ids[0]);
+      var busY = (py + cy) / 2 + (gi % 3) * 14;
+      var xs = grp.ids.map(function (id) { return X(id) + CARD_W / 2; });
+      var minX = Math.min.apply(null, xs.concat([ax]));
+      var maxX = Math.max.apply(null, xs.concat([ax]));
+      line(ax, py, ax, busY, '#94a3b8');
+      line(minX, busY, maxX, busY, '#94a3b8');
+      grp.ids.forEach(function (id) {
+        line(X(id) + CARD_W / 2, busY, X(id) + CARD_W / 2, Y(id), '#94a3b8');
+      });
+    }
+
     canvas.appendChild(svg);
 
-    members.forEach(function (p) {
+    vmembers.forEach(function (p) {
       var d = document.createElement('div');
       d.className = 'ft-card';
       d.style.left = X(p.id) + 'px'; d.style.top = Y(p.id) + 'px'; d.style.height = CARD_H + 'px';
@@ -440,13 +484,22 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
         '<div class="ft-name">' + esc(p.name) + '</div>' +
         '<div class="ft-years">' + yrs + '</div>' + ageHtml +
         (st ? '<div class="ft-status">' + st.emoji + ' ' + st.label + '</div>' : '');
+      var kids = childrenOf(p.id);
+      if (kids.length) {
+        var tg = document.createElement('div');
+        tg.className = 'ft-toggle';
+        tg.textContent = expanded[p.id] ? '−' : '+' + kids.length;
+        tg.title = expanded[p.id] ? 'Tutup keturunan' : 'Buka keturunan';
+        tg.onclick = function (ev) { ev.stopPropagation(); expanded[p.id] = !expanded[p.id]; render(); };
+        d.appendChild(tg);
+      }
       d.onclick = function () { openPanel(p.id); };
       canvas.appendChild(d);
     });
 
     document.getElementById('memberCount').textContent = members.length;
-    document.getElementById('generationCount').textContent = maxG;
-    scale = 1; panX = 20; panY = 20; applyTransform();
+    document.getElementById('generationCount').textContent = allMaxG;
+    applyTransform();
   }
 
   function initials(n) { return (n || '?').split(/\s+/).slice(0, 2).map(function (x) { return x[0]; }).join('').toUpperCase(); }
@@ -473,7 +526,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     btn.textContent = '🔔 Akses' + (c.count ? ' (' + c.count + ')' : '');
   }
 
-  // ================= MANAJEMEN AKSES =================
   function mkBtn(txt, danger, fn) {
     var b = document.createElement('button');
     b.className = 'ft-btn' + (danger ? ' danger' : '');
@@ -526,7 +578,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     document.getElementById('zoomIn').onclick = function () { zoom(1.15); };
     document.getElementById('zoomOut').onclick = function () { zoom(0.87); };
     document.getElementById('fitBtn').onclick = fit;
-    document.getElementById('resetBtn').onclick = fit;
+    document.getElementById('resetBtn').onclick = function () { expanded = {}; render(); fit(); };
     document.getElementById('fullBtn').onclick = function () {
       var vp = document.getElementById('treeViewport');
       if (document.fullscreenElement) document.exitFullscreen(); else vp.requestFullscreen();
