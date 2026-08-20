@@ -305,7 +305,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
 
   var members = [], rels = [], byId = {};
   var scale = 1, panX = 20, panY = 20;
-  var CARD_W = 175, CARD_H = 140, GAP_X = 55, ROW_H = 225;
+  var CARD_W = 175, CARD_H = 140, GAP_X = 40, ROW_H = 225;
   var uiWired = false;
 
   function spousesOf(id) { return rels.filter(function (r) { return r.rel_type === 'spouse' && (r.person_a === id || r.person_b === id); }); }
@@ -361,13 +361,13 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     for (var k = 0; k < 2; k++) rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) { dgen[r.person_b] = Math.max(dgen[r.person_b], dgen[r.person_a] + 1); });
     rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) { var g = Math.max(dgen[r.person_a], dgen[r.person_b]); dgen[r.person_a] = g; dgen[r.person_b] = g; });
 
-    // ===== V16: hitung anggota yang TERLIHAT (mode buka-tutup) =====
-    var roots = members.filter(function (p) { return parentsOf(p.id).length === 0; });
-    roots.forEach(function (r0) {
+    // ===== anggota terlihat (mode buka-tutup) =====
+    var roots0 = members.filter(function (p) { return parentsOf(p.id).length === 0; });
+    roots0.forEach(function (r0) {
       if (expanded[r0.id] === undefined) expanded[r0.id] = (dgen[r0.id] === 1);
     });
     var vis = {};
-    var q0 = roots.map(function (r0) { return r0.id; });
+    var q0 = roots0.map(function (r0) { return r0.id; });
     q0.forEach(function (id) { vis[id] = true; });
     while (q0.length) {
       var vid = q0.shift();
@@ -381,31 +381,78 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
         });
       }
     }
-    var vmembers = members.filter(function (p) { return vis[p.id]; });
-    // ===== akhir blok V16 =====
 
-    var placed = {}, pos = {}, slotByGen = {};
-    function nextSlot(g) { slotByGen[g] = (slotByGen[g] || 0) + 1; return slotByGen[g] - 1; }
-    var queue = roots.map(function (r0) { return r0.id; });
-    function place(id) {
-      if (placed[id]) return;
-      placed[id] = true;
-      var g = dgen[id];
-      pos[id] = { g: g, s: nextSlot(g) };
-      spousesOf(id).forEach(function (r) {
-        var sp = r.person_a === id ? r.person_b : r.person_a;
-        if (!placed[sp] && vis[sp]) { placed[sp] = true; pos[sp] = { g: g, s: nextSlot(g) }; }
-      });
-      childrenOf(id).forEach(function (ch) { if (vis[ch]) queue.push(ch); });
+    // ===== V17: layout SUBTREE (blok per keluarga, anti silang) =====
+    var memberIdx = {};
+    members.forEach(function (p, i) { memberIdx[p.id] = i; });
+    function visParents(id) { return parentsOf(id).filter(function (p) { return vis[p]; }); }
+    function isAnchor(id) {
+      if (!vis[id]) return false;
+      if (visParents(id).length) return true;
+      var sps = spousesOf(id);
+      if (parentsOf(id).length === 0 && dgen[id] === 1) {
+        for (var i = 0; i < sps.length; i++) {
+          var s = sps[i].person_a === id ? sps[i].person_b : sps[i].person_a;
+          if (vis[s] && parentsOf(s).length === 0 && dgen[s] === 1 && memberIdx[s] < memberIdx[id]) return false;
+        }
+        return true;
+      }
+      for (var j = 0; j < sps.length; j++) {
+        var s2 = sps[j].person_a === id ? sps[j].person_b : sps[j].person_a;
+        if (vis[s2] && (visParents(s2).length || (parentsOf(s2).length === 0 && dgen[s2] === 1))) return false;
+      }
+      return true;
     }
-    while (queue.length) place(queue.shift());
-    vmembers.forEach(function (p) { if (!placed[p.id]) place(p.id); });
-
-    function X(id) { return pos[id].s * (CARD_W + GAP_X) + 20; }
-    function Y(id) { return (pos[id].g - 1) * ROW_H + 20; }
+    function buildUnit(anchor) {
+      var spList = [];
+      spousesOf(anchor).forEach(function (r) {
+        var sp = r.person_a === anchor ? r.person_b : r.person_a;
+        if (vis[sp] && !isAnchor(sp) && spList.indexOf(sp) < 0) spList.push(sp);
+      });
+      var mems;
+      if (spList.length === 2) mems = [spList[0], anchor, spList[1]];
+      else if (spList.length === 1) mems = [anchor, spList[0]];
+      else mems = [anchor].concat(spList);
+      var kids = [];
+      mems.forEach(function (m) {
+        childrenOf(m).forEach(function (c) {
+          if (vis[c] && isAnchor(c) && kids.indexOf(c) < 0) kids.push(c);
+        });
+      });
+      return { anchor: anchor, mems: mems, kids: kids, units: [], width: 0 };
+    }
+    var UNIT_GAP = 60;
+    function measure(u) {
+      u.units = u.kids.map(function (kk) { return measure(buildUnit(kk)); });
+      var own = u.mems.length * CARD_W + (u.mems.length - 1) * GAP_X;
+      var cw = 0;
+      u.units.forEach(function (cu, i) { cw += cu.width; if (i) cw += UNIT_GAP; });
+      u.width = Math.max(own, cw, CARD_W);
+      return u;
+    }
+    var posX = {};
+    function placeUnit(u, x0) {
+      var own = u.mems.length * CARD_W + (u.mems.length - 1) * GAP_X;
+      var mx = x0 + (u.width - own) / 2;
+      u.mems.forEach(function (m, i) { posX[m] = mx + i * (CARD_W + GAP_X); });
+      var cw = 0;
+      u.units.forEach(function (cu, i) { cw += cu.width; if (i) cw += UNIT_GAP; });
+      var cx = x0 + (u.width - cw) / 2;
+      u.units.forEach(function (cu) { placeUnit(cu, cx); cx += cu.width + UNIT_GAP; });
+    }
+    var rootAnchors = members.filter(function (p) { return vis[p.id] && isAnchor(p.id) && visParents(p.id).length === 0; });
+    var rootUnits = rootAnchors.map(function (r0) { return measure(buildUnit(r0.id)); });
+    var rx = 20;
+    rootUnits.forEach(function (u) { placeUnit(u, rx); rx += u.width + UNIT_GAP; });
+    var vmembers = members.filter(function (p) { return vis[p.id] && posX[p.id] !== undefined; });
+    members.forEach(function (p) {
+      if (vis[p.id] && posX[p.id] === undefined) { posX[p.id] = rx; rx += CARD_W + UNIT_GAP; vmembers.push(p); }
+    });
+    function X(id) { return posX[id]; }
+    function Y(id) { return (dgen[id] - 1) * ROW_H + 20; }
 
     var maxW = 0, maxG = 0, allMaxG = 0;
-    vmembers.forEach(function (p) { maxW = Math.max(maxW, X(p.id) + CARD_W); maxG = Math.max(maxG, pos[p.id].g); });
+    vmembers.forEach(function (p) { maxW = Math.max(maxW, X(p.id) + CARD_W); maxG = Math.max(maxG, dgen[p.id]); });
     members.forEach(function (p) { allMaxG = Math.max(allMaxG, dgen[p.id]); });
     var W = maxW + 40, H = maxG * ROW_H + 60;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -429,44 +476,42 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     }
 
     rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) {
-      if (!pos[r.person_a] || !pos[r.person_b]) return;
+      if (posX[r.person_a] === undefined || posX[r.person_b] === undefined) return;
       var a = r.person_a, b = r.person_b;
       if (X(a) > X(b)) { var t = a; a = b; b = t; }
       var y = Y(a) + CARD_H / 2;
       var st = r.marriage_status;
       var color = st === 'divorced' ? '#ef4444' : (st === 'widowed' ? '#94a3b8' : '#10b981');
       line(X(a) + CARD_W, y, X(b), y, color, st === 'divorced');
-      var mx = (X(a) + CARD_W + X(b)) / 2;
-      label(mx, y - 6, st === 'divorced' ? '//' : (st === 'widowed' ? '🕊' : '♥'), color);
+      label((X(a) + CARD_W + X(b)) / 2, y - 6, st === 'divorced' ? '//' : (st === 'widowed' ? '🕊' : '♥'), color);
     });
 
-    var groups = {};
-    vmembers.forEach(function (ch) {
-      if (!pos[ch.id]) return;
-      var ps = parentsOf(ch.id).filter(function (p) { return pos[p]; }).slice().sort();
-      if (!ps.length) return;
-      var key = ps.join('|');
-      if (!groups[key]) groups[key] = { ps: ps, ids: [] };
-      groups[key].ids.push(ch.id);
-    });
-    var gkeys = Object.keys(groups);
-    for (var gi = 0; gi < gkeys.length; gi++) {
-      var grp = groups[gkeys[gi]];
-      var ax = 0;
-      grp.ps.forEach(function (p) { ax += X(p) + CARD_W / 2; });
-      ax /= grp.ps.length;
-      var py = Math.max.apply(null, grp.ps.map(function (p) { return Y(p); })) + CARD_H;
-      var cy = Y(grp.ids[0]);
-      var busY = (py + cy) / 2 + (gi % 3) * 14;
-      var xs = grp.ids.map(function (id) { return X(id) + CARD_W / 2; });
-      var minX = Math.min.apply(null, xs.concat([ax]));
-      var maxX = Math.max.apply(null, xs.concat([ax]));
-      line(ax, py, ax, busY, '#94a3b8');
+    function drawUnitLines(u) {
+      if (!u.units.length) return;
+      var busY = (Y(u.mems[0]) + CARD_H + Y(u.units[0].anchor)) / 2;
+      var centers = u.units.map(function (cu) { return X(cu.anchor) + CARD_W / 2; });
+      var minX = Math.min.apply(null, centers), maxX = Math.max.apply(null, centers);
+      var pairs = {};
+      u.units.forEach(function (cu) {
+        var c = cu.anchor;
+        var ps = u.mems.filter(function (m) { return parentsOf(c).indexOf(m) >= 0; });
+        if (!ps.length) return;
+        var key = ps.slice().sort().join('|');
+        if (!pairs[key]) pairs[key] = ps;
+      });
+      Object.keys(pairs).forEach(function (kk) {
+        var ps = pairs[kk];
+        var mid = ps.length > 1 ? (X(ps[0]) + X(ps[1])) / 2 + CARD_W / 2 : X(ps[0]) + CARD_W / 2;
+        line(mid, Y(ps[0]) + CARD_H, mid, busY, '#94a3b8');
+      });
       line(minX, busY, maxX, busY, '#94a3b8');
-      grp.ids.forEach(function (id) {
-        line(X(id) + CARD_W / 2, busY, X(id) + CARD_W / 2, Y(id), '#94a3b8');
+      u.units.forEach(function (cu) {
+        var cx2 = X(cu.anchor) + CARD_W / 2;
+        line(cx2, busY, cx2, Y(cu.anchor), '#94a3b8');
+        drawUnitLines(cu);
       });
     }
+    rootUnits.forEach(drawUnitLines);
 
     canvas.appendChild(svg);
 
