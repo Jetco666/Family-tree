@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
   .top-actions .btn{display:inline-block;font-size:11px;padding:6px 8px;}
   .ft-panel{width:100vw;max-width:100vw;}
 }
-.ft-toggle{position:absolute;bottom:-11px;left:50%;transform:translateX(-50%);min-width:26px;height:22px;padding:0 7px;border-radius:11px;background:#334155;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:3;box-shadow:0 1px 4px rgba(0,0,0,.3);}
+.ft-toggle{position:absolute;min-width:26px;height:22px;padding:0 7px;border-radius:11px;background:#334155;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:3;box-shadow:0 1px 4px rgba(0,0,0,.3);}
 body.dark .ft-toggle{background:#7dd3fc;color:#0d141c;}
 .ft-card{position:absolute;width:175px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:10px;text-align:center;cursor:pointer;font-family:sans-serif;box-sizing:border-box;}
 body.dark .ft-card{background:#111c26;border-color:#344451;color:#edf3f8;}
@@ -97,9 +97,9 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
 <header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar</h1></div><div class="top-actions"><button id="onlineBtn" class="btn" style="display:none;">👥 Online</button><button id="reqBtn" class="btn" style="display:none;">🔔 Akses</button><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
 
 <main>
-<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Tampilan awal menampilkan <b>2 generasi</b> (leluhur + anak-anak). Klik tombol <b>+n</b> pada kartu anak untuk membuka keturunan cabang itu, dan <b>−</b> untuk menutupnya.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
+<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Tampilan awal <b>2 generasi</b>. Klik tombol <b>+n</b> yang berada <b>di tengah pasangan</b> untuk membuka generasi berikutnya — generasi setelahnya tetap tertutup sampai tombolnya diklik.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
 <section class="toolbar"><div class="search-wrap" style="position:relative;"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="ft-searchres"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button><button id="addBtn" class="btn" style="display:none;">+ Tambah Anggota</button></div></section>
-<section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;transform-origin:0 0;"></div><div class="hint">Geser untuk melihat cabang lain • Cubit untuk zoom • +n buka keturunan</div></section>
+<section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;transform-origin:0 0;"></div><div class="hint">Geser untuk melihat cabang lain • Cubit untuk zoom • +n di tengah pasangan untuk buka keturunan</div></section>
 </main>
 
 <script>
@@ -361,14 +361,32 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     for (var k = 0; k < 2; k++) rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) { dgen[r.person_b] = Math.max(dgen[r.person_b], dgen[r.person_a] + 1); });
     rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) { var g = Math.max(dgen[r.person_a], dgen[r.person_b]); dgen[r.person_a] = g; dgen[r.person_b] = g; });
 
-    // ===== V18: anggota terlihat (mode 2 generasi default + buka-tutup) =====
-    var roots0 = members.filter(function (p) { return parentsOf(p.id).length === 0; });
-    // Inisialisasi: hanya root generasi 1 yang di-expand otomatis → menampilkan 2 generasi
-    roots0.forEach(function (r0) {
-      if (expanded[r0.id] === undefined) expanded[r0.id] = (dgen[r0.id] === 1);
+    // ===== V19: default 2 generasi + tombol per PASANGAN =====
+    function pairKey(a, b) { return a < b ? a + '|' + b : b + '|' + a; }
+    function reveals(key, ch) {
+      var ps = parentsOf(ch);
+      if (key.indexOf('|') < 0) return ps.indexOf(key) >= 0;
+      var pr = key.split('|');
+      var h0 = ps.indexOf(pr[0]) >= 0, h1 = ps.indexOf(pr[1]) >= 0;
+      if (h0 && h1) return true;
+      if (h0 && ps.length === 1) return true;
+      if (h1 && ps.length === 1) return true;
+      return false;
+    }
+    // hanya pasangan generasi-1 yang terbuka sejak awal
+    rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) {
+      if (dgen[r.person_a] === 1 && dgen[r.person_b] === 1) {
+        var kk = pairKey(r.person_a, r.person_b);
+        if (expanded[kk] === undefined) expanded[kk] = true;
+      }
+    });
+    members.forEach(function (p) {
+      if (dgen[p.id] === 1 && parentsOf(p.id).length === 0 && spousesOf(p.id).length === 0) {
+        if (expanded[p.id] === undefined) expanded[p.id] = true;
+      }
     });
     var vis = {};
-    var q0 = roots0.map(function (r0) { return r0.id; });
+    var q0 = members.filter(function (p) { return parentsOf(p.id).length === 0 && dgen[p.id] === 1; }).map(function (p) { return p.id; });
     q0.forEach(function (id) { vis[id] = true; });
     while (q0.length) {
       var vid = q0.shift();
@@ -376,14 +394,21 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
         var sp = r.person_a === vid ? r.person_b : r.person_a;
         if (!vis[sp]) { vis[sp] = true; q0.push(sp); }
       });
-      if (expanded[vid]) {
-        childrenOf(vid).forEach(function (ch) {
-          if (!vis[ch]) { vis[ch] = true; q0.push(ch); }
+      var vsp = spousesOf(vid).map(function (r) { return r.person_a === vid ? r.person_b : r.person_a; }).filter(function (s) { return vis[s]; });
+      var consider = [];
+      if (childrenOf(vid).length && !vsp.length) consider.push({ key: vid, pool: childrenOf(vid) });
+      vsp.forEach(function (sp) {
+        consider.push({ key: pairKey(vid, sp), pool: childrenOf(vid).concat(childrenOf(sp)) });
+      });
+      consider.forEach(function (c) {
+        if (!expanded[c.key]) return;
+        c.pool.forEach(function (ch) {
+          if (!vis[ch] && reveals(c.key, ch)) { vis[ch] = true; q0.push(ch); }
         });
-      }
+      });
     }
 
-    // ===== V17: layout SUBTREE =====
+    // ===== layout SUBTREE =====
     var memberIdx = {};
     members.forEach(function (p, i) { memberIdx[p.id] = i; });
     function visParents(id) { return parentsOf(id).filter(function (p) { return vis[p]; }); }
@@ -516,16 +541,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
 
     canvas.appendChild(svg);
 
-    // ===== V18: fungsi penentu siapa yang boleh punya toggle (anchor keluarga saja) =====
-    function canToggle(id) {
-      if (!vis[id]) return false;
-      var kids = childrenOf(id);
-      if (!kids.length) return false;
-      // jika ini bukan anchor di unit-nya, jangan tampil toggle
-      if (!isAnchor(id)) return false;
-      return true;
-    }
-
     vmembers.forEach(function (p) {
       var d = document.createElement('div');
       d.className = 'ft-card';
@@ -540,18 +555,36 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
         '<div class="ft-name">' + esc(p.name) + '</div>' +
         '<div class="ft-years">' + yrs + '</div>' + ageHtml +
         (st ? '<div class="ft-status">' + st.emoji + ' ' + st.label + '</div>' : '');
-      // Toggle hanya untuk anchor keluarga (V18)
-      if (canToggle(p.id)) {
-        var kids = childrenOf(p.id);
-        var tg = document.createElement('div');
-        tg.className = 'ft-toggle';
-        tg.textContent = expanded[p.id] ? '−' : '+' + kids.length;
-        tg.title = expanded[p.id] ? 'Tutup keturunan' : 'Buka keturunan';
-        tg.onclick = function (ev) { ev.stopPropagation(); expanded[p.id] = !expanded[p.id]; render(); };
-        d.appendChild(tg);
-      }
       d.onclick = function () { openPanel(p.id); };
       canvas.appendChild(d);
+    });
+
+    // ===== V19: tombol +n / − di TENGAH pasangan =====
+    function addToggle(key, x, y, n) {
+      var tg = document.createElement('div');
+      tg.className = 'ft-toggle';
+      tg.textContent = expanded[key] ? '−' : '+' + n;
+      tg.title = expanded[key] ? 'Tutup keturunan' : 'Buka keturunan';
+      tg.style.left = x + 'px';
+      tg.style.top = y + 'px';
+      tg.style.bottom = 'auto';
+      tg.style.transform = 'translateX(-50%)';
+      tg.onclick = function (ev) { ev.stopPropagation(); expanded[key] = !expanded[key]; render(); };
+      canvas.appendChild(tg);
+    }
+    vmembers.forEach(function (p) {
+      if (posX[p.id] === undefined) return;
+      var vsp = spousesOf(p.id).map(function (r) { return r.person_a === p.id ? r.person_b : r.person_a; }).filter(function (s) { return vis[s] && posX[s] !== undefined; });
+      if (!vsp.length && childrenOf(p.id).length) {
+        addToggle(p.id, X(p.id) + CARD_W / 2, Y(p.id) + CARD_H + 12, childrenOf(p.id).length);
+      }
+      vsp.forEach(function (sp) {
+        if (memberIdx[sp] < memberIdx[p.id]) return;
+        var pool = childrenOf(p.id).concat(childrenOf(sp)).filter(function (c) { return reveals(pairKey(p.id, sp), c); });
+        if (!pool.length) return;
+        var midX = (X(p.id) + X(sp)) / 2 + CARD_W / 2;
+        addToggle(pairKey(p.id, sp), midX, Y(p.id) + CARD_H + 12, pool.length);
+      });
     });
 
     document.getElementById('memberCount').textContent = members.length;
