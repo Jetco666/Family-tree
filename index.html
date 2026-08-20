@@ -97,7 +97,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
 <header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar</h1></div><div class="top-actions"><button id="onlineBtn" class="btn" style="display:none;">👥 Online</button><button id="reqBtn" class="btn" style="display:none;">🔔 Akses</button><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
 
 <main>
-<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Klik anggota untuk profil. Klik tombol <b>+n</b> di bawah kartu untuk membuka keturunan cabang itu, dan <b>−</b> untuk menutupnya.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
+<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Tampilan awal menampilkan <b>2 generasi</b> (leluhur + anak-anak). Klik tombol <b>+n</b> pada kartu anak untuk membuka keturunan cabang itu, dan <b>−</b> untuk menutupnya.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
 <section class="toolbar"><div class="search-wrap" style="position:relative;"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="ft-searchres"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button><button id="addBtn" class="btn" style="display:none;">+ Tambah Anggota</button></div></section>
 <section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;transform-origin:0 0;"></div><div class="hint">Geser untuk melihat cabang lain • Cubit untuk zoom • +n buka keturunan</div></section>
 </main>
@@ -361,8 +361,9 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     for (var k = 0; k < 2; k++) rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) { dgen[r.person_b] = Math.max(dgen[r.person_b], dgen[r.person_a] + 1); });
     rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) { var g = Math.max(dgen[r.person_a], dgen[r.person_b]); dgen[r.person_a] = g; dgen[r.person_b] = g; });
 
-    // ===== anggota terlihat (mode buka-tutup) =====
+    // ===== V18: anggota terlihat (mode 2 generasi default + buka-tutup) =====
     var roots0 = members.filter(function (p) { return parentsOf(p.id).length === 0; });
+    // Inisialisasi: hanya root generasi 1 yang di-expand otomatis → menampilkan 2 generasi
     roots0.forEach(function (r0) {
       if (expanded[r0.id] === undefined) expanded[r0.id] = (dgen[r0.id] === 1);
     });
@@ -382,7 +383,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       }
     }
 
-    // ===== V17: layout SUBTREE (blok per keluarga, anti silang) =====
+    // ===== V17: layout SUBTREE =====
     var memberIdx = {};
     members.forEach(function (p, i) { memberIdx[p.id] = i; });
     function visParents(id) { return parentsOf(id).filter(function (p) { return vis[p]; }); }
@@ -515,6 +516,16 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
 
     canvas.appendChild(svg);
 
+    // ===== V18: fungsi penentu siapa yang boleh punya toggle (anchor keluarga saja) =====
+    function canToggle(id) {
+      if (!vis[id]) return false;
+      var kids = childrenOf(id);
+      if (!kids.length) return false;
+      // jika ini bukan anchor di unit-nya, jangan tampil toggle
+      if (!isAnchor(id)) return false;
+      return true;
+    }
+
     vmembers.forEach(function (p) {
       var d = document.createElement('div');
       d.className = 'ft-card';
@@ -529,8 +540,9 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
         '<div class="ft-name">' + esc(p.name) + '</div>' +
         '<div class="ft-years">' + yrs + '</div>' + ageHtml +
         (st ? '<div class="ft-status">' + st.emoji + ' ' + st.label + '</div>' : '');
-      var kids = childrenOf(p.id);
-      if (kids.length) {
+      // Toggle hanya untuk anchor keluarga (V18)
+      if (canToggle(p.id)) {
+        var kids = childrenOf(p.id);
         var tg = document.createElement('div');
         tg.className = 'ft-toggle';
         tg.textContent = expanded[p.id] ? '−' : '+' + kids.length;
