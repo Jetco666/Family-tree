@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Family Tree — Keluarga Besar</title>
+<title>Family Tree — Keluarga Besar Zakaria Ishak</title>
 <link rel="stylesheet" href="style.css">
 <script src="supabase-config.js?v=3"></script>
 <script>
@@ -41,7 +41,7 @@ body.dark .ft-panel{background:#0d141c;color:#edf3f8;}
 body.dark .ft-link{background:#16222e;}
 .ft-close{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;}
 .ft-x{color:#ef4444;cursor:pointer;font-weight:700;margin-left:6px;}
-.ft-photo-big{width:84px;height:84px;border-radius:50%;object-fit:cover;margin:8px 0;display:block;}
+.ft-photo-big{width:84px;height:84px;border-radius:50%;object-fit:cover;margin:8px 0;display:block;cursor:zoom-in;}
 .ft-searchres{position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #e2e8f0;border-radius:10px;z-index:4000;max-height:220px;overflow:auto;display:none;}
 body.dark .ft-searchres{background:#111c26;color:#edf3f8;}
 .ft-searchres div{padding:8px 12px;cursor:pointer;font-size:14px;}
@@ -94,10 +94,10 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
   </div>
 </div>
 
-<header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar</h1></div><div class="top-actions"><button id="onlineBtn" class="btn" style="display:none;">👥 Online</button><button id="reqBtn" class="btn" style="display:none;">🔔 Akses</button><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
+<header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar Zakaria Ishak</h1></div><div class="top-actions"><button id="onlineBtn" class="btn" style="display:none;">👥 Online</button><button id="reqBtn" class="btn" style="display:none;">🔔 Akses</button><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
 
 <main>
-<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Tampilan awal <b>2 generasi</b>. Klik tombol <b>+n</b> yang berada <b>di tengah pasangan</b> untuk membuka generasi berikutnya — generasi setelahnya tetap tertutup sampai tombolnya diklik.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
+<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Tampilan awal <b>2 generasi</b>. Klik tombol <b>+n</b> yang berada <b>di tengah pasangan</b> untuk membuka generasi berikutnya — generasi setelahnya tetap tertutup sampai tombolnya diklik. Klik anggota untuk melihat profil & foto.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
 <section class="toolbar"><div class="search-wrap" style="position:relative;"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="ft-searchres"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button><button id="addBtn" class="btn" style="display:none;">+ Tambah Anggota</button></div></section>
 <section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;transform-origin:0 0;"></div><div class="hint">Geser untuk melihat cabang lain • Cubit untuk zoom • +n di tengah pasangan untuk buka keturunan</div></section>
 </main>
@@ -303,6 +303,19 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     });
   }
 
+  // ===== V21: lightbox foto (viewer & admin) =====
+  function openLightbox(url) {
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9000;display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:16px;';
+    var img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    img.style.cssText = 'max-width:94vw;max-height:94vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.6);';
+    ov.appendChild(img);
+    ov.onclick = function () { ov.remove(); };
+    document.body.appendChild(ov);
+  }
+
   var members = [], rels = [], byId = {};
   var scale = 1, panX = 20, panY = 20;
   var CARD_W = 175, CARD_H = 140, GAP_X = 40, ROW_H = 225;
@@ -361,7 +374,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     for (var k = 0; k < 2; k++) rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) { dgen[r.person_b] = Math.max(dgen[r.person_b], dgen[r.person_a] + 1); });
     rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) { var g = Math.max(dgen[r.person_a], dgen[r.person_b]); dgen[r.person_a] = g; dgen[r.person_b] = g; });
 
-    // ===== V19: default 2 generasi + tombol per PASANGAN =====
     function pairKey(a, b) { return a < b ? a + '|' + b : b + '|' + a; }
     function reveals(key, ch) {
       var ps = parentsOf(ch);
@@ -373,7 +385,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       if (h1 && ps.length === 1) return true;
       return false;
     }
-    // hanya pasangan generasi-1 yang terbuka sejak awal
     rels.filter(function (r) { return r.rel_type === 'spouse'; }).forEach(function (r) {
       if (dgen[r.person_a] === 1 && dgen[r.person_b] === 1) {
         var kk = pairKey(r.person_a, r.person_b);
@@ -408,7 +419,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       });
     }
 
-    // ===== layout SUBTREE =====
     var memberIdx = {};
     members.forEach(function (p, i) { memberIdx[p.id] = i; });
     function visParents(id) { return parentsOf(id).filter(function (p) { return vis[p]; }); }
@@ -559,7 +569,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       canvas.appendChild(d);
     });
 
-    // ===== V19: tombol +n / − di TENGAH pasangan =====
     function addToggle(key, x, y, n) {
       var tg = document.createElement('div');
       tg.className = 'ft-toggle';
@@ -614,6 +623,22 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     var btn = document.getElementById('reqBtn');
     btn.style.display = 'inline-block';
     btn.textContent = '🔔 Akses' + (c.count ? ' (' + c.count + ')' : '');
+  }
+
+  // ===== V21: hapus foto (khusus admin) =====
+  async function deletePhoto(p) {
+    if (!confirm('Hapus foto profil ' + p.name + '?')) return;
+    try {
+      var list = await SB.storage.from('photos').list('', { search: p.id });
+      if (!list.error && list.data && list.data.length) {
+        var paths = list.data.map(function (f) { return f.name; });
+        await SB.storage.from('photos').remove(paths);
+      }
+      var u = await SB.from('family_members').update({ photo_url: null }).eq('id', p.id);
+      if (u.error) throw u.error;
+      await refresh();
+      openPanel(p.id);
+    } catch (e) { alert('Gagal hapus foto: ' + (e.message || e)); }
   }
 
   function mkBtn(txt, danger, fn) {
@@ -741,7 +766,10 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
     var st = STATUS[p.marital_status];
     var age = ageOf(p);
     var html = '<button class="ft-close" onclick="this.parentNode.remove()">×</button>';
-    if (p.photo_url) html += '<img class="ft-photo-big" src="' + escAttr(p.photo_url) + '" alt="">';
+    if (p.photo_url) {
+      html += '<img class="ft-photo-big" id="ftPhotoBig" src="' + escAttr(p.photo_url) + '" alt="" title="Klik untuk memperbesar">';
+      if (isAdmin) html += '<div style="margin-top:-2px;"><button class="ft-btn danger" id="pDelPhoto">🗑 Hapus Foto</button></div>';
+    }
     html += '<h2>' + esc(p.name) + '</h2>';
     html += '<div class="muted">' + (p.gender === 'male' ? 'Laki-laki' : p.gender === 'female' ? 'Perempuan' : '') + '</div>';
     if (p.birth_date) html += '<div class="muted">🎂 Lahir: ' + fmtDate(p.birth_date) + '</div>';
@@ -796,7 +824,11 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       var u = e.target && e.target.getAttribute ? e.target.getAttribute('data-unlink') : null;
       if (u) unlinkRel(u);
     };
+    var big = panel.querySelector('#ftPhotoBig');
+    if (big) big.onclick = function () { openLightbox(p.photo_url); };
     if (isAdmin) {
+      var delPhoto = panel.querySelector('#pDelPhoto');
+      if (delPhoto) delPhoto.onclick = function () { deletePhoto(p); };
       panel.querySelector('#pEdit').onclick = function () { openForm(p); };
       panel.querySelector('#pDel').onclick = async function () {
         if (!confirm('Hapus ' + p.name + '? Semua hubungannya ikut terhapus.')) return;
