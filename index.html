@@ -521,36 +521,17 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       label((X(a) + CARD_W + X(b)) / 2, y - 6, st === 'divorced' ? '//' : (st === 'widowed' ? '🕊' : '♥'), color);
     });
 
-    // ===== V22: garis anak digambar PER PASANGAN orang tua (saudara tiri terpisah) =====
-    function drawUnitLines(u) {
-      if (!u.units.length) return;
-      var groups = {};
-      u.units.forEach(function (cu) {
-        var c = cu.anchor;
-        var ps = u.mems.filter(function (m) { return parentsOf(c).indexOf(m) >= 0; });
-        if (!ps.length) ps = [u.mems[0]];
-        var key = ps.slice().sort().join('|');
-        if (!groups[key]) groups[key] = { ps: ps, cus: [] };
-        groups[key].cus.push(cu);
-      });
-      var gkeys = Object.keys(groups);
-      for (var gi = 0; gi < gkeys.length; gi++) {
-        var g = groups[gkeys[gi]];
-        var baseY = (Y(u.mems[0]) + CARD_H + Y(g.cus[0].anchor)) / 2;
-        var busY = baseY + gi * 14;
-        var mid = g.ps.length > 1 ? (X(g.ps[0]) + X(g.ps[1])) / 2 + CARD_W / 2 : X(g.ps[0]) + CARD_W / 2;
-        line(mid, Y(g.ps[0]) + CARD_H, mid, busY, '#94a3b8');
-        var centers = g.cus.map(function (cu) { return X(cu.anchor) + CARD_W / 2; });
-        var minX = Math.min.apply(null, centers), maxX = Math.max.apply(null, centers);
-        if (maxX > minX) line(minX, busY, maxX, busY, '#94a3b8');
-        g.cus.forEach(function (cu) {
-          var cx2 = X(cu.anchor) + CARD_W / 2;
-          line(cx2, busY, cx2, Y(cu.anchor), '#94a3b8');
-        });
-      }
-      u.units.forEach(function (cu) { drawUnitLines(cu); });
-    }
-    rootUnits.forEach(drawUnitLines);
+    // ===== V23: garis anak turun LANGSUNG dari masing-masing orang tua, tanpa putus =====
+    rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) {
+      var p = r.person_a, c = r.person_b;
+      if (posX[p] === undefined || posX[c] === undefined) return;
+      var px = X(p) + CARD_W / 2, py2 = Y(p) + CARD_H;
+      var cx = X(c) + CARD_W / 2, cy2 = Y(c);
+      var midY = (py2 + cy2) / 2;
+      line(px, py2, px, midY, '#94a3b8');
+      if (px !== cx) line(px, midY, cx, midY, '#94a3b8');
+      line(cx, midY, cx, cy2, '#94a3b8');
+    });
 
     canvas.appendChild(svg);
 
