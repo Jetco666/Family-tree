@@ -521,7 +521,6 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       label((X(a) + CARD_W + X(b)) / 2, y - 6, st === 'divorced' ? '//' : (st === 'widowed' ? '🕊' : '♥'), color);
     });
 
-    // ===== V25: garis anak TURUN dari TITIK TENGAH garis pasangan orang tuanya =====
     var childGroups = {};
     rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) {
       var p = r.person_a, c = r.person_b;
@@ -541,11 +540,12 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       var midX, topY;
       if (g.b) { midX = (X(g.a) + X(g.b)) / 2 + CARD_W / 2; topY = Y(g.a) + CARD_H / 2; }
       else     { midX = X(g.a) + CARD_W / 2;               topY = Y(g.a) + CARD_H; }
-      var busY = Y(g.a) + CARD_H + 30 + (gi % 3) * 12;
+      var busY = Y(g.a) + CARD_H + 22 + (gi % 3) * 26;
       line(midX, topY, midX, busY, '#94a3b8');
       var centers = g.kids.map(function (k) { return X(k) + CARD_W / 2; });
-      var minX = Math.min.apply(null, centers), maxX = Math.max.apply(null, centers);
-      if (maxX > minX) line(minX, busY, maxX, busY, '#94a3b8');
+      var minX = Math.min.apply(null, centers.concat([midX]));
+      var maxX = Math.max.apply(null, centers.concat([midX]));
+      line(minX, busY, maxX, busY, '#94a3b8');
       g.kids.forEach(function (k) {
         line(X(k) + CARD_W / 2, busY, X(k) + CARD_W / 2, Y(k), '#94a3b8');
       });
