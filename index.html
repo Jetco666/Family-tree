@@ -1,3 +1,108 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Family Tree — Keluarga Besar Zakaria Ishak</title>
+<link rel="stylesheet" href="style.css">
+<script src="supabase-config.js?v=3"></script>
+<script>
+window.addEventListener('error', function (e) {
+  var el = document.getElementById('login-error');
+  if (el) el.textContent = '⚠ Error skrip: ' + e.message + ' (baris ' + e.lineno + ')';
+}, true);
+</script>
+<style>
+#treeViewport{touch-action:none;}
+@media(max-width:800px){
+  .topbar{flex-wrap:wrap;height:auto;padding:10px 12px;gap:8px;}
+  .top-actions{gap:6px;}
+  .top-actions .btn{display:inline-block;font-size:11px;padding:6px 8px;}
+  .ft-panel{width:100vw;max-width:100vw;}
+}
+.ft-toggle{position:absolute;min-width:26px;height:22px;padding:0 7px;border-radius:11px;background:#334155;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:3;box-shadow:0 1px 4px rgba(0,0,0,.3);}
+body.dark .ft-toggle{background:#7dd3fc;color:#0d141c;}
+.ft-card{position:absolute;width:175px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:10px;text-align:center;cursor:pointer;font-family:sans-serif;box-sizing:border-box;}
+body.dark .ft-card{background:#111c26;border-color:#344451;color:#edf3f8;}
+.ft-avatar{width:40px;height:40px;border-radius:50%;background:#10b981;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 5px;font-weight:700;font-size:14px;overflow:hidden;}
+.ft-avatar img{width:100%;height:100%;object-fit:cover;}
+.ft-name{font-size:13px;font-weight:700;line-height:1.2;}
+.ft-years{font-size:10px;color:#64748b;margin-top:2px;line-height:1.35;}
+.ft-age{font-size:11px;margin-top:2px;font-weight:600;color:#059669;}
+.ft-age.dead{color:#64748b;}
+body.dark .ft-age{color:#34d399;} body.dark .ft-age.dead{color:#94a3b8;}
+.ft-status{font-size:11px;margin-top:3px;font-weight:600;}
+.ft-panel{position:fixed;top:0;right:0;bottom:0;width:340px;max-width:92vw;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.18);z-index:5000;overflow:auto;padding:20px;font-family:sans-serif;}
+body.dark .ft-panel{background:#0d141c;color:#edf3f8;}
+.ft-panel h2{margin:0 0 4px;font-size:20px;}
+.ft-panel .muted{color:#64748b;font-size:12px;}
+.ft-panel h4{margin:16px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#64748b;}
+.ft-link{display:block;padding:8px;margin:4px 0;background:#f1f5f9;border-radius:8px;font-size:13px;}
+body.dark .ft-link{background:#16222e;}
+.ft-close{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;}
+.ft-x{color:#ef4444;cursor:pointer;font-weight:700;margin-left:6px;}
+.ft-photo-big{width:84px;height:84px;border-radius:50%;object-fit:cover;margin:8px 0;display:block;cursor:zoom-in;}
+.ft-searchres{position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #e2e8f0;border-radius:10px;z-index:4000;max-height:220px;overflow:auto;display:none;}
+body.dark .ft-searchres{background:#111c26;color:#edf3f8;}
+.ft-searchres div{padding:8px 12px;cursor:pointer;font-size:14px;}
+.ft-btn{padding:8px 12px;border:none;border-radius:8px;background:#10b981;color:#fff;font-size:13px;cursor:pointer;font-weight:600;margin-top:6px;}
+.ft-btn.danger{background:#ef4444;}
+.ft-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:7000;display:flex;align-items:center;justify-content:center;padding:16px;}
+.ft-modal-card{background:#fff;border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:90vh;overflow:auto;font-family:sans-serif;}
+body.dark .ft-modal-card{background:#0d141c;color:#edf3f8;}
+.ft-modal-card label{display:block;font-size:12px;font-weight:600;margin:10px 0 4px;color:#475569;}
+.ft-modal-card input,.ft-modal-card select,.ft-modal-card textarea{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;}
+body.dark .ft-modal-card input,body.dark .ft-modal-card select,body.dark .ft-modal-card textarea{background:#111c26;border-color:#344451;color:#edf3f8;}
+.ft-photo-preview{width:64px;height:64px;border-radius:50%;object-fit:cover;margin:6px 0;display:block;}
+.ft-relbox{display:flex;flex-direction:column;gap:6px;margin:8px 0;padding:10px;background:#f8fafc;border-radius:10px;}
+body.dark .ft-relbox{background:#16222e;}
+.ft-relbox select,.ft-relbox input{padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;}
+body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border-color:#344451;color:#edf3f8;}
+.login-toggle{color:#10b981;font-weight:600;text-decoration:none;cursor:pointer;}
+</style>
+</head>
+<body>
+
+<div id="login-overlay" class="login-overlay">
+  <div class="login-card">
+    <div class="login-logo">🌳</div>
+    <h1 class="login-title">Silsilah Keluarga</h1>
+    <p class="login-subtitle">Masuk untuk melihat pohon keluarga</p>
+    <form id="login-form" class="login-form">
+      <label for="login-email">Email</label>
+      <input type="email" id="login-email" required autocomplete="email" placeholder="nama@keluarga.com">
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••••••" minlength="6">
+      <button type="submit" id="login-btn" class="login-btn">Masuk</button>
+      <p id="login-error" class="login-error"></p>
+    </form>
+    <form id="req-form" class="login-form" style="display:none;">
+      <label for="req-name">Nama Lengkap</label>
+      <input id="req-name" required placeholder="Nama Anda">
+      <label for="req-email">Email</label>
+      <input type="email" id="req-email" required placeholder="email@anda.com">
+      <label for="req-password">Password (min. 6 karakter)</label>
+      <input type="password" id="req-password" required minlength="6" placeholder="••••••••••••">
+      <button type="submit" id="req-btn" class="login-btn">📨 Kirim Permintaan Akses</button>
+      <p id="req-error" class="login-error"></p>
+    </form>
+    <p class="login-footer" id="toggle-line">
+      <a class="login-toggle" id="show-req">Belum punya akun? Minta akses</a>
+      <a class="login-toggle" id="show-login" style="display:none;">Sudah punya akun? Masuk</a>
+    </p>
+    <p class="login-footer">Hanya anggota keluarga yang disetujui admin yang dapat melihat.</p>
+  </div>
+</div>
+
+<header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar Zakaria Ishak</h1></div><div class="top-actions"><button id="onlineBtn" class="btn" style="display:none;">👥 Online</button><button id="reqBtn" class="btn" style="display:none;">🔔 Akses</button><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
+
+<main>
+<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Tampilan awal <b>2 generasi</b>. Klik tombol <b>+n</b> yang berada <b>di tengah pasangan</b> untuk membuka generasi berikutnya — generasi setelahnya tetap tertutup sampai tombolnya diklik. Klik anggota untuk melihat profil & foto.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
+<section class="toolbar"><div class="search-wrap" style="position:relative;"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="ft-searchres"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button><button id="addBtn" class="btn" style="display:none;">+ Tambah Anggota</button></div></section>
+<section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;transform-origin:0 0;"></div><div class="hint">Geser untuk melihat cabang lain • Cubit untuk zoom • +n di tengah pasangan untuk buka keturunan</div></section>
+</main>
+
+<script>
 (function () {
   var loginOverlay = document.getElementById('login-overlay');
   var loginCard = document.querySelector('.login-card');
@@ -416,13 +521,16 @@
       label((X(a) + CARD_W + X(b)) / 2, y - 6, st === 'divorced' ? '//' : (st === 'widowed' ? '🕊' : '♥'), color);
     });
 
-    // ===== V24: SATU garis lurus utuh per relasi orang-tua -> anak =====
-    // Turun langsung dari kartu orang tua ke kartu anak. Tanpa garis horizontal,
-    // sehingga TIDAK ADA garis yang menghubungkan saudara tiri.
+    // ===== V23: garis anak turun LANGSUNG dari masing-masing orang tua, tanpa putus =====
     rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) {
       var p = r.person_a, c = r.person_b;
       if (posX[p] === undefined || posX[c] === undefined) return;
-      line(X(p) + CARD_W / 2, Y(p) + CARD_H, X(c) + CARD_W / 2, Y(c), '#94a3b8');
+      var px = X(p) + CARD_W / 2, py2 = Y(p) + CARD_H;
+      var cx = X(c) + CARD_W / 2, cy2 = Y(c);
+      var midY = (py2 + cy2) / 2;
+      line(px, py2, px, midY, '#94a3b8');
+      if (px !== cx) line(px, midY, cx, midY, '#94a3b8');
+      line(cx, midY, cx, cy2, '#94a3b8');
     });
 
     canvas.appendChild(svg);
@@ -792,3 +900,6 @@
     };
   }
 })();
+</script>
+</body>
+</html>
