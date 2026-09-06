@@ -97,7 +97,7 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
 <header class="topbar"><div><div class="eyebrow">FAMILY TREE</div><h1 id="familyTitle">Keluarga Besar Zakaria Ishak</h1></div><div class="top-actions"><button id="onlineBtn" class="btn" style="display:none;">👥 Online</button><button id="reqBtn" class="btn" style="display:none;">🔔 Akses</button><button id="searchBtn" class="icon-btn">⌕</button><button id="themeBtn" class="icon-btn">◐</button><button id="resetBtn" class="btn">Reset Tampilan</button></div></header>
 
 <main>
-<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Tampilan awal <b>2 generasi</b>. Klik tombol <b>+n</b> yang berada <b>di tengah pasangan</b> untuk membuka generasi berikutnya — generasi setelahnya tetap tertutup sampai tombolnya diklik. Klik anggota untuk melihat profil & foto.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
+<section class="hero"><div><span class="badge">🌳 Silsilah Keluarga</span><h2>Jelajahi hubungan keluarga secara interaktif.</h2><p>Tampilan awal <b>2 generasi</b>. Klik tombol <b>+n</b> yang berada <b>di tengah pasangan</b> untuk membuka generasi berikutnya. Klik anggota untuk melihat profil & foto.</p></div><div class="stats"><div><strong id="memberCount">0</strong><span>Anggota</span></div><div><strong id="generationCount">0</strong><span>Generasi</span></div></div></section>
 <section class="toolbar"><div class="search-wrap" style="position:relative;"><input id="searchInput" placeholder="Cari nama anggota keluarga..." autocomplete="off"><div id="searchResults" class="ft-searchres"></div></div><div class="controls"><button id="zoomOut" class="control">−</button><button id="zoomIn" class="control">+</button><button id="fitBtn" class="control wide">Fit</button><button id="fullBtn" class="control">⛶</button><button id="addBtn" class="btn" style="display:none;">+ Tambah Anggota</button></div></section>
 <section id="treeViewport" class="tree-viewport" style="position:relative;overflow:hidden;"><div id="treeCanvas" class="tree-canvas" style="position:relative;transform-origin:0 0;"></div><div class="hint">Geser untuk melihat cabang lain • Cubit untuk zoom • +n di tengah pasangan untuk buka keturunan</div></section>
 </main>
@@ -521,17 +521,35 @@ body.dark .ft-relbox select,body.dark .ft-relbox input{background:#111c26;border
       label((X(a) + CARD_W + X(b)) / 2, y - 6, st === 'divorced' ? '//' : (st === 'widowed' ? '🕊' : '♥'), color);
     });
 
-    // ===== V23: garis anak turun LANGSUNG dari masing-masing orang tua, tanpa putus =====
+    // ===== V25: garis anak TURUN dari TITIK TENGAH garis pasangan orang tuanya =====
+    var childGroups = {};
     rels.filter(function (r) { return r.rel_type === 'parent_child'; }).forEach(function (r) {
       var p = r.person_a, c = r.person_b;
       if (posX[p] === undefined || posX[c] === undefined) return;
-      var px = X(p) + CARD_W / 2, py2 = Y(p) + CARD_H;
-      var cx = X(c) + CARD_W / 2, cy2 = Y(c);
-      var midY = (py2 + cy2) / 2;
-      line(px, py2, px, midY, '#94a3b8');
-      if (px !== cx) line(px, midY, cx, midY, '#94a3b8');
-      line(cx, midY, cx, cy2, '#94a3b8');
+      var other = null;
+      var ps = parentsOf(c);
+      for (var i = 0; i < ps.length; i++) {
+        if (ps[i] !== p && posX[ps[i]] !== undefined) { other = ps[i]; break; }
+      }
+      var key = other ? pairKey(p, other) : 'single|' + p;
+      if (!childGroups[key]) childGroups[key] = { a: p, b: other, kids: [] };
+      if (childGroups[key].kids.indexOf(c) < 0) childGroups[key].kids.push(c);
     });
+    var gk = Object.keys(childGroups);
+    for (var gi = 0; gi < gk.length; gi++) {
+      var g = childGroups[gk[gi]];
+      var midX, topY;
+      if (g.b) { midX = (X(g.a) + X(g.b)) / 2 + CARD_W / 2; topY = Y(g.a) + CARD_H / 2; }
+      else     { midX = X(g.a) + CARD_W / 2;               topY = Y(g.a) + CARD_H; }
+      var busY = Y(g.a) + CARD_H + 30 + (gi % 3) * 12;
+      line(midX, topY, midX, busY, '#94a3b8');
+      var centers = g.kids.map(function (k) { return X(k) + CARD_W / 2; });
+      var minX = Math.min.apply(null, centers), maxX = Math.max.apply(null, centers);
+      if (maxX > minX) line(minX, busY, maxX, busY, '#94a3b8');
+      g.kids.forEach(function (k) {
+        line(X(k) + CARD_W / 2, busY, X(k) + CARD_W / 2, Y(k), '#94a3b8');
+      });
+    }
 
     canvas.appendChild(svg);
 
